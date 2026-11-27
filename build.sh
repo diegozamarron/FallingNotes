@@ -2,8 +2,12 @@
 # Builds FallingNotes and wraps it into FallingNotes.app (ad-hoc signed).
 set -euo pipefail
 cd "$(dirname "$0")"
-swift build -c release
-BIN="$(swift build -c release --show-bin-path)/FallingNotes"
+VERSION="$(cat VERSION)"
+# UNIVERSAL=1 builds for both Apple Silicon and Intel (used for releases); the default builds for this Mac only.
+ARCHS=()
+[ "${UNIVERSAL:-0}" = "1" ] && ARCHS=(--arch arm64 --arch x86_64)
+swift build -c release ${ARCHS[@]+"${ARCHS[@]}"}
+BIN="$(swift build -c release ${ARCHS[@]+"${ARCHS[@]}"} --show-bin-path)/FallingNotes"
 APP="FallingNotes.app"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
@@ -21,8 +25,8 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>CFBundleName</key><string>FallingNotes</string>
   <key>CFBundleDisplayName</key><string>Falling Notes</string>
   <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleShortVersionString</key><string>1.0</string>
-  <key>CFBundleVersion</key><string>1</string>
+  <key>CFBundleShortVersionString</key><string>$VERSION</string>
+  <key>CFBundleVersion</key><string>$VERSION</string>
   <key>LSMinimumSystemVersion</key><string>14.0</string>
   <key>NSPrincipalClass</key><string>NSApplication</string>
   <key>NSHighResolutionCapable</key><true/>
@@ -37,5 +41,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 </dict>
 </plist>
 PLIST
+xattr -cr "$APP"                       # stray metadata (e.g. com.apple.provenance) breaks the signature
 codesign --force --sign - "$APP"
+codesign --verify --deep --strict "$APP"   # fail the build if the signature isn't valid
 echo "Built $APP"

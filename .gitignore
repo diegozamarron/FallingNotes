@@ -8,3 +8,6 @@ FallingNotes.app/
 # MIDI files are usually someone else's music: keep them out of the repo
 *.mid
 *.midi
+
+# Release packages
+dist/
