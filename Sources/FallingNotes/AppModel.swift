@@ -68,8 +68,8 @@ final class AppModel: ObservableObject {
     @Published var fps = 30
     @Published var codec: VideoCodec = .h264
     @Published var includeAudio = true
-    /// Use the hardware encoder and the CPU together (about twice as fast for H.264). Off = one encoder, one stream.
-    @Published var fastEncoding = true
+    /// How H.264 is encoded: hardware + CPU together (fastest), CPU alone (fast, one stream), or hardware alone.
+    @Published var encodingMode: EncodingMode = .fastest
     @Published var cacheBytes: Int64 = 0
     @Published var exportProgress: Double?
     @Published var exportStart: Date?          // when the export began (includes preparing the audio)
@@ -288,7 +288,7 @@ final class AppModel: ObservableObject {
         lastExportSummary = nil
         // Detached so the render loop runs on a background thread. A plain `Task {}` here would inherit the main
         // actor and freeze the whole window for the length of the export.
-        let config = SegmentedExporter.plan(codec: options.codec, fast: fastEncoding)
+        let config = SegmentedExporter.plan(codec: options.codec, mode: encodingMode)
         exportTask = Task.detached(priority: .userInitiated) {
             let report: @Sendable (Double) -> Void = { p in Task { @MainActor in model.exportUpdate(p) } }
             do {
@@ -318,7 +318,11 @@ final class AppModel: ObservableObject {
     func throughput(for mode: String) -> Double {
         let saved = UserDefaults.standard.double(forKey: "throughput.\(mode)")
         if saved > 50 { return saved }
-        return mode == "hybrid" ? 800 : 450
+        switch mode {                       // typical M-series figures until this Mac has measured its own
+        case "fastest": return 1200
+        case "compatible": return 1100
+        default: return 450
+        }
     }
 
     func learnSpeed(_ stats: ExportStats, options: ExportOptions) {
@@ -334,7 +338,7 @@ final class AppModel: ObservableObject {
         guard let song else { return nil }
         let options = exportOptions
         let (w, h) = options.resolution.size
-        let mode = SegmentedExporter.mode(for: SegmentedExporter.plan(codec: options.codec, fast: fastEncoding))
+        let mode = SegmentedExporter.mode(for: SegmentedExporter.plan(codec: options.codec, mode: encodingMode))
         return Double(options.frameCount(duration: song.totalDuration)) * Double(w * h) / 1e6 / throughput(for: mode)
     }
 

@@ -11,3 +11,6 @@ FallingNotes.app/
 
 # Release packages
 dist/
+
+# Third-party sources and build products (rebuilt by Tools/build_x264.sh)
+ThirdParty/

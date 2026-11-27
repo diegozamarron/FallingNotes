@@ -520,10 +520,13 @@ struct ExportCard: View {
                     Toggle("", isOn: $model.includeAudio).labelsHidden().toggleStyle(.switch).controlSize(.small)
                 }
                 if model.codec == .h264 {
-                    SettingRow("Fast encoding") {
-                        Toggle("", isOn: $model.fastEncoding).labelsHidden().toggleStyle(.switch).controlSize(.small)
+                    SettingRow("Encoding") {
+                        Picker("", selection: $model.encodingMode) {
+                            ForEach(EncodingMode.allCases) { Text($0.label).tag($0) }
+                        }
+                        .labelsHidden().fixedSize()
                     }
-                    .help("Uses the hardware encoder and the CPU together, about twice as fast. Turn off for a file made by a single encoder (maximum compatibility with unusual players).")
+                    .help("Fastest uses the hardware encoder and the CPU together. Single stream uses only the CPU encoder, so the file has one consistent stream (best compatibility). Efficient uses only the hardware encoder: slower, but cooler and quieter.")
                 }
 
                 if let song = model.song, model.exportProgress == nil {

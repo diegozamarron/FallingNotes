@@ -2,6 +2,7 @@
 # Builds FallingNotes and wraps it into FallingNotes.app (ad-hoc signed).
 set -euo pipefail
 cd "$(dirname "$0")"
+Tools/build_x264.sh                    # the encoder library (skipped if already built)
 VERSION="$(cat VERSION)"
 # UNIVERSAL=1 builds for both Apple Silicon and Intel (used for releases); the default builds for this Mac only.
 ARCHS=()
@@ -12,6 +13,8 @@ APP="FallingNotes.app"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN" "$APP/Contents/MacOS/FallingNotes"
+# Licence and third-party notices travel with the app (GPL requires this)
+cp LICENSE THIRD_PARTY_NOTICES.md "$APP/Contents/Resources/"
 # App icon (regenerate with Tools/make_icon.sh)
 [ -f Resources/AppIcon.icns ] && cp Resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 cat > "$APP/Contents/Info.plist" <<PLIST

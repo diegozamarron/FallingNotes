@@ -210,6 +210,11 @@ if let i = args.firstIndex(of: "--export"), args.count > i + 2 {
                 if let i = args.firstIndex(of: "--hw"), args.count > i + 1, let n = Int(args[i + 1]) { config.hardwareLanes = n }
                 if let i = args.firstIndex(of: "--sw"), args.count > i + 1, let n = Int(args[i + 1]) { config.softwareLanes = n }
                 if let i = args.firstIndex(of: "--x264"), args.count > i + 1, let n = Int(args[i + 1]) { config.x264Lanes = n }
+                if let i = args.firstIndex(of: "--mode"), args.count > i + 1, let m = EncodingMode(rawValue: args[i + 1]) {
+                    let verbose = config.verbose
+                    config = SegmentedExporter.plan(codec: options.codec, mode: m)   // --mode fastest|compatible|efficient
+                    config.verbose = verbose
+                }
                 if args.contains("--no-cache") { config.useCache = false }
                 if let i = args.firstIndex(of: "--segment"), args.count > i + 1, let n = Double(args[i + 1]) { config.segmentSeconds = n }
                 try await SegmentedExporter.export(song: song, style: style, audio: audio, options: options,

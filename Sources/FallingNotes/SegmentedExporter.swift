@@ -1,6 +1,7 @@
 import Accelerate
 import AVFoundation
 import CryptoKit
+import CX264
 import CoreVideo
 import Foundation
 import VideoToolbox
@@ -9,7 +10,7 @@ import VideoToolbox
 /// the software encoder runs on the CPU cores alongside it, so using both makes the export faster than either.
 enum EncoderLane: String {
     case hardware, software
-    case x264          // EXPERIMENT: libx264 through an external ffmpeg process (GPL, so never linked into the app)
+    case x264          // libx264 (GPL), linked into the app: much faster than Apple's software encoder
 }
 
 struct HybridConfig {
@@ -125,6 +126,19 @@ private final class SegmentQueue: @unchecked Sendable {
     func fail(_ e: Error) { lock.lock(); if error == nil { error = e }; lock.unlock() }
 }
 
+/// How to balance speed against heat and compatibility (H.264 only).
+enum EncodingMode: String, CaseIterable, Identifiable {
+    case fastest, compatible, efficient
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .fastest: return "Fastest (hardware + CPU)"
+        case .compatible: return "Fast, single stream (CPU)"
+        case .efficient: return "Efficient (hardware only)"
+        }
+    }
+}
+
 /// What an export did, so the app can learn how fast this Mac encodes and show better estimates.
 struct ExportStats {
     var encodedFrames = 0         // frames actually encoded (not reused from the cache)
@@ -134,18 +148,29 @@ struct ExportStats {
 }
 
 enum SegmentedExporter {
-    /// Which encoders to use. H.264 can use the hardware encoder and the CPU together ("fast"); HEVC's software
-    /// encoder is too slow to help, so HEVC uses the hardware alone. libx264 is never used by the app itself.
-    static func plan(codec: VideoCodec, fast: Bool) -> HybridConfig {
+    /// Which encoders to use. Only H.264 benefits from software encoding; HEVC always uses the hardware encoder.
+    ///  - fastest: the hardware encoder and libx264 together (two kinds of stream description in the file)
+    ///  - compatible: libx264 alone, which gives one consistent stream and is almost as fast
+    ///  - efficient: the hardware encoder alone (coolest and quietest, but about twice as slow)
+    static func plan(codec: VideoCodec, mode: EncodingMode) -> HybridConfig {
         var c = HybridConfig()
         c.hardwareLanes = 1
-        c.softwareLanes = (codec == .h264 && fast) ? 2 : 0
+        c.softwareLanes = 0
+        c.x264Lanes = 0
+        guard codec == .h264 else { return c }
+        switch mode {
+        case .fastest: c.x264Lanes = 1
+        case .compatible: c.hardwareLanes = 0; c.x264Lanes = 2
+        case .efficient: break
+        }
         return c
     }
 
+    /// A name for the encoder mix, used for the cache and for remembering how fast each mix is on this Mac.
     static func mode(for config: HybridConfig) -> String {
-        config.x264Lanes > 0 ? "x264-experiment"
-            : (config.hardwareLanes > 0 && config.softwareLanes > 0 ? "hybrid" : (config.hardwareLanes > 0 ? "hardware" : "software"))
+        if config.x264Lanes > 0 { return config.hardwareLanes > 0 ? "fastest" : "compatible" }
+        if config.hardwareLanes > 0 && config.softwareLanes > 0 { return "hybrid-apple" }
+        return config.hardwareLanes > 0 ? "efficient" : "software"
     }
 
     /// Exports like `Exporter.export`, but splits the video into segments encoded at the same time by the hardware
@@ -334,25 +359,48 @@ enum SegmentedExporter {
         }
     }
 
-    // MARK: EXPERIMENT: libx264 lane (external ffmpeg process)
+    // MARK: libx264 lane
 
+    /// Encodes a segment with libx264 in this process, then stores the compressed frames in an MP4 through
+    /// AVAssetWriter (no re-encoding), so the file looks like the other lanes' output.
     private static func encodeSegmentX264(index: Int, start: Int, count: Int, factory: FrameFactory,
                                           options: ExportOptions, directory: URL, isCancelled: @escaping @Sendable () -> Bool) throws {
-        let fps = factory.fps, w = factory.width, h = factory.height
+        let fps = factory.fps
         let url = directory.appendingPathComponent("seg_\(index).mp4")
-        let proc = Process()
-        proc.executableURL = URL(fileURLWithPath: "/opt/homebrew/bin/ffmpeg")
-        // The input's colour range and matrix are declared BEFORE -i; otherwise ffmpeg guesses and shifts the brightness.
-        proc.arguments = ["-v", "error", "-y", "-f", "rawvideo", "-pix_fmt", "nv12", "-color_range", "tv", "-colorspace", "bt709",
-                          "-s", "\(w)x\(h)", "-r", "\(fps)", "-i", "-",
-                          "-c:v", "libx264", "-preset", "veryfast", "-b:v", "\(options.videoBitrate)", "-bf", "0", "-g", "\(fps * 2)",
-                          "-threads", "3", "-pix_fmt", "yuv420p", "-profile:v", "high",
-                          "-x264-params", "colorprim=bt709:transfer=bt709:colormatrix=bt709:range=tv",
-                          "-movflags", "+faststart", url.path]
-        let pipe = Pipe()
-        proc.standardInput = pipe
-        try proc.run()
+        guard let encoder = cx264_open(Int32(factory.width), Int32(factory.height), Int32(fps),
+                                       Int32(options.videoBitrate / 1000), Int32(fps * 2), 3, "veryfast") else {
+            throw ExportError.writer("could not start the x264 encoder")
+        }
+        defer { cx264_close(encoder) }
 
+        // The stream's SPS/PPS become the MP4 sample description.
+        var sps: UnsafePointer<UInt8>?, pps: UnsafePointer<UInt8>?
+        var spsLength: Int32 = 0, ppsLength: Int32 = 0
+        guard cx264_headers(encoder, &sps, &spsLength, &pps, &ppsLength) == 0, let sps, let pps else {
+            throw ExportError.writer("x264 gave no stream headers")
+        }
+        var format: CMFormatDescription?
+        let pointers: [UnsafePointer<UInt8>] = [sps, pps]
+        let sizes = [Int(spsLength), Int(ppsLength)]
+        let made = pointers.withUnsafeBufferPointer { p in
+            sizes.withUnsafeBufferPointer { sz in
+                CMVideoFormatDescriptionCreateFromH264ParameterSets(allocator: nil, parameterSetCount: 2,
+                                                                    parameterSetPointers: p.baseAddress!, parameterSetSizes: sz.baseAddress!,
+                                                                    nalUnitHeaderLength: 4, formatDescriptionOut: &format)
+            }
+        }
+        guard made == noErr, let format else { throw ExportError.writer("could not describe the x264 stream") }
+
+        let writer = try AVAssetWriter(outputURL: url, fileType: .mp4)
+        let input = AVAssetWriterInput(mediaType: .video, outputSettings: nil, sourceFormatHint: format)   // passthrough
+        input.expectsMediaDataInRealTime = false
+        writer.add(input)
+        guard writer.startWriting() else {
+            throw ExportError.writer(writer.error?.localizedDescription ?? "could not start writing a segment")
+        }
+        writer.startSession(atSourceTime: .zero)
+
+        // Frames are drawn ahead on the shared drawing cores, as in the other lanes.
         let frames = OrderedFrames()
         let window = 10
         let slots = DispatchSemaphore(value: window)
@@ -363,28 +411,72 @@ enum SegmentedExporter {
                 factory.queue.addOperation { frames.store(factory.render(frame: frame), at: frame) }
             }
         }
-        let out = pipe.fileHandleForWriting
-        var packed = Data(count: w * h * 3 / 2)
-        for i in 0..<count {
-            if isCancelled() { frames.fail("cancelled") }
-            guard let pb = frames.take(start + i) else { break }
-            CVPixelBufferLockBaseAddress(pb, .readOnly)
-            packed.withUnsafeMutableBytes { dst in
-                let base = dst.baseAddress!
-                for plane in 0..<2 {
-                    let rows = CVPixelBufferGetHeightOfPlane(pb, plane), rowBytes = CVPixelBufferGetBytesPerRowOfPlane(pb, plane)
-                    let src = CVPixelBufferGetBaseAddressOfPlane(pb, plane)!
-                    let offset = plane == 0 ? 0 : w * h
-                    for y in 0..<rows { memcpy(base + offset + y * w, src + y * rowBytes, w) }
-                }
+        func stop() { frames.fail("cancelled"); for _ in 0..<(window + 1) { slots.signal() } }
+
+        func write(_ data: UnsafePointer<UInt8>, length: Int, pts: Int64, key: Bool) throws {
+            var block: CMBlockBuffer?
+            guard CMBlockBufferCreateWithMemoryBlock(allocator: nil, memoryBlock: nil, blockLength: length, blockAllocator: nil,
+                                                     customBlockSource: nil, offsetToData: 0, dataLength: length,
+                                                     flags: UInt32(kCMBlockBufferAssureMemoryNowFlag), blockBufferOut: &block) == noErr,
+                  let block, CMBlockBufferReplaceDataBytes(with: data, blockBuffer: block, offsetIntoDestination: 0, dataLength: length) == noErr
+            else { throw ExportError.writer("could not copy an encoded frame") }
+            var timing = CMSampleTimingInfo(duration: CMTime(value: 1, timescale: Int32(fps)),
+                                            presentationTimeStamp: CMTime(value: pts, timescale: Int32(fps)),
+                                            decodeTimeStamp: .invalid)           // no B-frames: decode time = display time
+            var size = length
+            var sample: CMSampleBuffer?
+            guard CMSampleBufferCreateReady(allocator: nil, dataBuffer: block, formatDescription: format, sampleCount: 1,
+                                            sampleTimingEntryCount: 1, sampleTimingArray: &timing, sampleSizeEntryCount: 1,
+                                            sampleSizeArray: &size, sampleBufferOut: &sample) == noErr, let sample
+            else { throw ExportError.writer("could not wrap an encoded frame") }
+            if !key, let attachments = CMSampleBufferGetSampleAttachmentsArray(sample, createIfNecessary: true) {
+                let dict = unsafeBitCast(CFArrayGetValueAtIndex(attachments, 0), to: CFMutableDictionary.self)
+                CFDictionarySetValue(dict, Unmanaged.passUnretained(kCMSampleAttachmentKey_NotSync).toOpaque(),
+                                     Unmanaged.passUnretained(kCFBooleanTrue).toOpaque())
             }
-            CVPixelBufferUnlockBaseAddress(pb, .readOnly)
-            try out.write(contentsOf: packed)
-            slots.signal()
+            while !input.isReadyForMoreMediaData {
+                if isCancelled() { throw CancellationError() }
+                usleep(300)
+            }
+            if !input.append(sample) { throw ExportError.writer(writer.error?.localizedDescription ?? "could not append an encoded frame") }
         }
-        try out.close()
-        proc.waitUntilExit()
-        guard proc.terminationStatus == 0 else { throw ExportError.writer("ffmpeg/x264 failed on segment \(index)") }
+
+        do {
+            var out: UnsafePointer<UInt8>?
+            var length: Int32 = 0, key: Int32 = 0
+            var outPTS: Int64 = 0
+            for i in 0..<count {
+                if isCancelled() { throw CancellationError() }
+                guard let pb = frames.take(start + i) else { throw ExportError.writer(frames.failureMessage ?? "frame missing") }
+                CVPixelBufferLockBaseAddress(pb, .readOnly)
+                let status = cx264_encode(encoder,
+                                          CVPixelBufferGetBaseAddressOfPlane(pb, 0)?.assumingMemoryBound(to: UInt8.self),
+                                          Int32(CVPixelBufferGetBytesPerRowOfPlane(pb, 0)),
+                                          CVPixelBufferGetBaseAddressOfPlane(pb, 1)?.assumingMemoryBound(to: UInt8.self),
+                                          Int32(CVPixelBufferGetBytesPerRowOfPlane(pb, 1)),
+                                          Int64(i), &out, &length, &key, &outPTS)
+                CVPixelBufferUnlockBaseAddress(pb, .readOnly)     // x264 copies the picture before encode returns
+                slots.signal()
+                if status < 0 { throw ExportError.writer("x264 failed on segment \(index)") }
+                if status == 1, let out { try write(out, length: Int(length), pts: outPTS, key: key != 0) }
+            }
+            while cx264_delayed(encoder) > 0 {             // flush the frames x264 was still holding
+                let status = cx264_encode(encoder, nil, 0, nil, 0, 0, &out, &length, &key, &outPTS)
+                if status < 0 { throw ExportError.writer("x264 failed while finishing segment \(index)") }
+                if status == 1, let out { try write(out, length: Int(length), pts: outPTS, key: key != 0) }
+            }
+        } catch {
+            stop()
+            writer.cancelWriting()
+            throw error
+        }
+        input.markAsFinished()
+        let finished = DispatchSemaphore(value: 0)
+        writer.finishWriting { finished.signal() }
+        finished.wait()
+        guard writer.status == .completed else {
+            throw ExportError.writer(writer.error?.localizedDescription ?? "segment \(index) failed")
+        }
     }
 
     // MARK: Audio and joining
