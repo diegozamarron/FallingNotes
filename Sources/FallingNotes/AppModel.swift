@@ -68,6 +68,9 @@ final class AppModel: ObservableObject {
     @Published var fps = 30
     @Published var codec: VideoCodec = .h264
     @Published var includeAudio = true
+    /// Use the hardware encoder and the CPU together (about twice as fast for H.264). Off = one encoder, one stream.
+    @Published var fastEncoding = true
+    @Published var cacheBytes: Int64 = 0
     @Published var exportProgress: Double?
     @Published var exportStart: Date?          // when the export began (includes preparing the audio)
     @Published var exportVideoStart: Date?     // when the first video frames were done; used for the time estimate
@@ -157,6 +160,7 @@ final class AppModel: ObservableObject {
             groups = []
             selection = []
             song = s
+            refreshCacheSize()
             scrubTime = 0
         } catch {
             errorMessage = error.localizedDescription
@@ -284,10 +288,19 @@ final class AppModel: ObservableObject {
         lastExportSummary = nil
         // Detached so the render loop runs on a background thread. A plain `Task {}` here would inherit the main
         // actor and freeze the whole window for the length of the export.
+        let config = SegmentedExporter.plan(codec: options.codec, fast: fastEncoding)
         exportTask = Task.detached(priority: .userInitiated) {
+            let report: @Sendable (Double) -> Void = { p in Task { @MainActor in model.exportUpdate(p) } }
             do {
-                try await Exporter.export(song: song, style: style, audio: audio, options: options, to: url) { p in
-                    Task { @MainActor in model.exportUpdate(p) }
+                do {
+                    let stats = try await SegmentedExporter.export(song: song, style: style, audio: audio, options: options,
+                                                                   config: config, to: url, progress: report)
+                    await MainActor.run { model.learnSpeed(stats, options: options) }
+                } catch is CancellationError {
+                    throw CancellationError()
+                } catch {
+                    // If the segmented path fails for any reason, fall back to the plain single-encoder export.
+                    try await Exporter.export(song: song, style: style, audio: audio, options: options, to: url, progress: report)
                 }
                 await MainActor.run { model.exportFinished(url: url) }
             } catch is CancellationError {
@@ -297,6 +310,39 @@ final class AppModel: ObservableObject {
                 await MainActor.run { model.errorMessage = message; model.exportEnded() }
             }
         }
+    }
+
+    // MARK: Render-time estimate and cache
+
+    /// Megapixels per second this Mac has encoded at (remembered from earlier exports), or a typical M-series figure.
+    func throughput(for mode: String) -> Double {
+        let saved = UserDefaults.standard.double(forKey: "throughput.\(mode)")
+        if saved > 50 { return saved }
+        return mode == "hybrid" ? 800 : 450
+    }
+
+    func learnSpeed(_ stats: ExportStats, options: ExportOptions) {
+        guard stats.encodedFrames > 600, stats.encodeSeconds > 2 else { return }     // too little real encoding to learn from
+        let (w, h) = options.resolution.size
+        let rate = Double(stats.encodedFrames) * Double(w * h) / 1e6 / stats.encodeSeconds
+        let old = UserDefaults.standard.double(forKey: "throughput.\(stats.mode)")
+        UserDefaults.standard.set(old > 50 ? (old + rate) / 2 : rate, forKey: "throughput.\(stats.mode)")
+    }
+
+    /// About how long rendering will take, not counting segments that may be reused from the cache.
+    func estimatedRenderSeconds() -> Double? {
+        guard let song else { return nil }
+        let options = exportOptions
+        let (w, h) = options.resolution.size
+        let mode = SegmentedExporter.mode(for: SegmentedExporter.plan(codec: options.codec, fast: fastEncoding))
+        return Double(options.frameCount(duration: song.totalDuration)) * Double(w * h) / 1e6 / throughput(for: mode)
+    }
+
+    func refreshCacheSize() { cacheBytes = SegmentCache.sizeOnDisk }
+
+    func clearCache() {
+        SegmentCache.clear()
+        refreshCacheSize()
     }
 
     private func exportUpdate(_ p: Double) {
@@ -314,6 +360,7 @@ final class AppModel: ObservableObject {
     }
 
     private func exportEnded() {
+        refreshCacheSize()
         exportProgress = nil
         exportStart = nil
         exportVideoStart = nil

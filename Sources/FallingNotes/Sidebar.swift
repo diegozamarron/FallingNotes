@@ -519,6 +519,12 @@ struct ExportCard: View {
                 SettingRow("Include audio") {
                     Toggle("", isOn: $model.includeAudio).labelsHidden().toggleStyle(.switch).controlSize(.small)
                 }
+                if model.codec == .h264 {
+                    SettingRow("Fast encoding") {
+                        Toggle("", isOn: $model.fastEncoding).labelsHidden().toggleStyle(.switch).controlSize(.small)
+                    }
+                    .help("Uses the hardware encoder and the CPU together, about twice as fast. Turn off for a file made by a single encoder (maximum compatibility with unusual players).")
+                }
 
                 if let song = model.song, model.exportProgress == nil {
                     let o = model.exportOptions
@@ -526,7 +532,8 @@ struct ExportCard: View {
                                                           countStyle: .file)
                     HStack(spacing: 6) {
                         Image(systemName: "info.circle").foregroundStyle(.secondary)
-                        Text("\(formatClock(song.totalDuration)) · \(o.frameCount(duration: song.totalDuration).formatted()) frames · about \(bytes)")
+                        Text("\(formatClock(song.totalDuration)) · \(o.frameCount(duration: song.totalDuration).formatted()) frames · up to \(bytes)"
+                             + (model.estimatedRenderSeconds().map { " · renders in about \(formatClock($0))" } ?? ""))
                             .foregroundStyle(.secondary)
                         Spacer(minLength: 0)
                     }
@@ -544,6 +551,16 @@ struct ExportCard: View {
                     .buttonStyle(.borderedProminent)
                     .controlSize(.large)
                     .disabled(model.song == nil)
+                }
+                if model.cacheBytes > 1_000_000 {
+                    HStack(spacing: 6) {
+                        Image(systemName: "externaldrive").foregroundStyle(.secondary)
+                        Text("Saved video pieces: \(ByteCountFormatter.string(fromByteCount: model.cacheBytes, countStyle: .file)) (re-exports reuse what hasn't changed)")
+                            .foregroundStyle(.secondary).lineLimit(2)
+                        Spacer(minLength: 0)
+                        Button("Clear") { model.clearCache() }.controlSize(.mini)
+                    }
+                    .font(.system(size: 11))
                 }
                 if let summary = model.lastExportSummary {
                     HStack(spacing: 6) {

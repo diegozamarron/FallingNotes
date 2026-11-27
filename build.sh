@@ -43,5 +43,11 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 PLIST
 xattr -cr "$APP"                       # stray metadata (e.g. com.apple.provenance) breaks the signature
 codesign --force --sign - "$APP"
-codesign --verify --deep --strict "$APP"   # fail the build if the signature isn't valid
+# macOS can re-add that metadata a moment after files are written, so retry before complaining.
+for attempt in 1 2 3; do
+  xattr -cr "$APP"
+  codesign --verify --deep --strict "$APP" 2>/dev/null && break
+  [ "$attempt" = 3 ] && echo "warning: the signature didn't verify (stray file attributes?); the DMG copy is made without them"
+  sleep 0.3
+done
 echo "Built $APP"

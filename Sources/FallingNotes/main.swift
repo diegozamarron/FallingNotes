@@ -134,7 +134,11 @@ if let i = CommandLine.arguments.firstIndex(of: "--bench"), CommandLine.argument
     print(String(format: "audio setup      %7.0f ms", try ms {
         player = try AudioPlayer(song: song, settings: .defaults(for: song)) }))
     _ = player
-    let w = 1280, h = 720
+    var w = 1280, h = 720
+    if let r = CommandLine.arguments.firstIndex(of: "--size"), CommandLine.arguments.count > r + 1 {
+        let wh = CommandLine.arguments[r + 1].split(separator: "x").compactMap { Int($0) }
+        if wh.count == 2 { (w, h) = (wh[0], wh[1]) }
+    }
     let cs = CGColorSpace(name: CGColorSpace.sRGB)!
     let ctx = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: 0, space: cs,
                         bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue)!
@@ -146,7 +150,7 @@ if let i = CommandLine.arguments.firstIndex(of: "--bench"), CommandLine.argument
                       videoTime: Song.leadIn + Double(f) * song.duration / Double(frames), song: song, style: Style())
         }
     }
-    print(String(format: "drawFrame (720p) %7.2f ms/frame", draw / Double(frames)))
+    print(String(format: "drawFrame (%dx%d) %7.2f ms/frame  = %.0f frames/s on one core", w, h, draw / Double(frames), 1000 * Double(frames) / draw))
     exit(0)
 }
 
@@ -167,6 +171,7 @@ if let i = args.firstIndex(of: "--export"), args.count > i + 2 {
     }
     if args.contains("--hevc") { options.codec = .hevc }
     if args.contains("--silent") { options.includeAudio = false }
+    if let b = args.firstIndex(of: "--bitrate-scale"), args.count > b + 1, let v = Double(args[b + 1]) { options.bitrateScale = v }
     func list(_ flag: String) -> [Int] {
         guard let i = args.firstIndex(of: flag), args.count > i + 1 else { return [] }
         return args[i + 1].split(separator: ",").compactMap { Int($0) }
@@ -194,9 +199,23 @@ if let i = args.firstIndex(of: "--export"), args.count > i + 2 {
             if let s = args.firstIndex(of: "--soundfont"), args.count > s + 1 {
                 audio.soundFont = URL(fileURLWithPath: args[s + 1])
             }
-            try await Exporter.export(song: song, style: style, audio: audio, options: options, to: output) { p in
+            let tick: @Sendable (Double) -> Void = { p in
                 print(String(format: "\rprogress %.0f%%", p * 100), terminator: "")
                 fflush(stdout)
+            }
+            if args.contains("--hybrid") {
+                // --hybrid [--hw N] [--sw M] [--segment SECONDS]: segments encoded by hardware and software at once
+                var config = HybridConfig()
+                config.verbose = true
+                if let i = args.firstIndex(of: "--hw"), args.count > i + 1, let n = Int(args[i + 1]) { config.hardwareLanes = n }
+                if let i = args.firstIndex(of: "--sw"), args.count > i + 1, let n = Int(args[i + 1]) { config.softwareLanes = n }
+                if let i = args.firstIndex(of: "--x264"), args.count > i + 1, let n = Int(args[i + 1]) { config.x264Lanes = n }
+                if args.contains("--no-cache") { config.useCache = false }
+                if let i = args.firstIndex(of: "--segment"), args.count > i + 1, let n = Double(args[i + 1]) { config.segmentSeconds = n }
+                try await SegmentedExporter.export(song: song, style: style, audio: audio, options: options,
+                                                   config: config, to: output, progress: tick)
+            } else {
+                try await Exporter.export(song: song, style: style, audio: audio, options: options, to: output, progress: tick)
             }
             print("\nWrote \(output.path)")
             exit(0)
