@@ -112,7 +112,7 @@ text("Falling Notes", size: 24, weight: .semibold, alpha: 0.95, centerX: 28, top
 if !version.isEmpty { text("Version \(version)", size: 12, weight: .regular, alpha: 0.55, centerX: 29, top: 52, align: .left) }
 text("Drag Falling Notes into Applications", size: 16, weight: .semibold, alpha: 0.95, centerX: W / 2, top: 262)
 text("First launch: System Settings → Privacy & Security → Open Anyway", size: 11, weight: .regular, alpha: 0.65, centerX: W / 2, top: 286)
-text("© 2026 Diego Zamarron · Free software under the GNU GPL v3 or later", size: 10, weight: .regular, alpha: 0.5, centerX: W / 2, top: 318)
+text("© 2026 Diego Zamarron · zamarron.com · Free software under the GNU GPL v3 or later", size: 10, weight: .regular, alpha: 0.5, centerX: W / 2, top: 318)
 
 NSGraphicsContext.restoreGraphicsState()
 try! rep.representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: outPath))

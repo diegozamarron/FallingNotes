@@ -172,10 +172,38 @@ struct SettingsView: View {
                 SoundCard()
                 LookCard()
                 ExportCard()
+                CreditFooter()
             }
             .padding(14)
         }
         .background(Color(nsColor: .underPageBackgroundColor))
+    }
+}
+
+/// A small credit at the bottom of the sidebar.
+struct CreditFooter: View {
+    private var version: String { Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev" }
+
+    var body: some View {
+        VStack(spacing: 3) {
+            HStack(spacing: 4) {
+                Text("Made by Diego Zamarron")
+                    .foregroundStyle(.secondary)
+                Text("·").foregroundStyle(.tertiary)
+                Link("zamarron.com", destination: URL(string: "https://zamarron.com")!)
+            }
+            .font(.system(size: 11, weight: .medium))
+            HStack(spacing: 4) {
+                Text("Version \(version)")
+                Text("·")
+                Link("Source & license", destination: URL(string: "https://github.com/diegozamarron/FallingNotes")!)
+            }
+            .font(.system(size: 10.5))
+            .foregroundStyle(.tertiary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.top, 6)
+        .padding(.bottom, 2)
     }
 }
 

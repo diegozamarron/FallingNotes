@@ -30,7 +30,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleShortVersionString</key><string>$VERSION</string>
   <key>CFBundleVersion</key><string>$VERSION</string>
-  <key>NSHumanReadableCopyright</key><string>Copyright © 2026 Diego Zamarron. Free software under the GNU GPL v3 or later.</string>
+  <key>NSHumanReadableCopyright</key><string>Copyright © 2026 Diego Zamarron (zamarron.com). Free software under the GNU GPL v3 or later.</string>
   <key>LSMinimumSystemVersion</key><string>14.0</string>
   <key>NSPrincipalClass</key><string>NSApplication</string>
   <key>NSHighResolutionCapable</key><true/>

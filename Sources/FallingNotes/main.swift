@@ -3,6 +3,24 @@
 import SwiftUI
 import Foundation
 
+/// The standard About window (name, version and the copyright line come from the app's Info.plist) plus a credit.
+@MainActor func showAboutPanel() {
+    let centered = NSMutableParagraphStyle()
+    centered.alignment = .center
+    let body: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 11), .paragraphStyle: centered,
+                                               .foregroundColor: NSColor.secondaryLabelColor]
+    let credits = NSMutableAttributedString(string: "Made by Diego Zamarron\n",
+                                            attributes: [.font: NSFont.systemFont(ofSize: 13, weight: .semibold),
+                                                         .paragraphStyle: centered, .foregroundColor: NSColor.labelColor])
+    credits.append(NSAttributedString(string: "zamarron.com",
+                                      attributes: body.merging([.link: URL(string: "https://zamarron.com")!]) { $1 }))
+    credits.append(NSAttributedString(string: "\nSource code and license: ", attributes: body))
+    credits.append(NSAttributedString(string: "github.com/diegozamarron/FallingNotes",
+                                      attributes: body.merging([.link: URL(string: "https://github.com/diegozamarron/FallingNotes")!]) { $1 }))
+    credits.append(NSAttributedString(string: "\nFree software under the GNU GPL v3 or later. Includes the x264 encoder.", attributes: body))
+    NSApp.orderFrontStandardAboutPanel(options: [.credits: credits])
+}
+
 struct FallingNotesApp: App {
     @StateObject private var model = AppModel()
 
@@ -57,6 +75,9 @@ struct FallingNotesApp: App {
                 }
         }
         .commands {
+            CommandGroup(replacing: .appInfo) {
+                Button("About Falling Notes") { showAboutPanel() }
+            }
             CommandGroup(replacing: .newItem) {
                 Button("Open MIDI File…") { model.openPanel() }
                     .keyboardShortcut("o")
