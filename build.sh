@@ -4,11 +4,9 @@ set -euo pipefail
 cd "$(dirname "$0")"
 Tools/build_x264.sh                    # the encoder library (skipped if already built)
 VERSION="$(cat VERSION)"
-# UNIVERSAL=1 builds for both Apple Silicon and Intel (used for releases); the default builds for this Mac only.
-ARCHS=()
-[ "${UNIVERSAL:-0}" = "1" ] && ARCHS=(--arch arm64 --arch x86_64)
-swift build -c release ${ARCHS[@]+"${ARCHS[@]}"}
-BIN="$(swift build -c release ${ARCHS[@]+"${ARCHS[@]}"} --show-bin-path)/FallingNotes"
+# Falling Notes is built for Apple Silicon only.
+swift build -c release --arch arm64
+BIN="$(swift build -c release --arch arm64 --show-bin-path)/FallingNotes"
 APP="FallingNotes.app"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"

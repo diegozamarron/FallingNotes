@@ -15,7 +15,7 @@ adjust how each instrument looks and sounds, and export an `.mp4` or `.mov`.
 ## Install
 
 Download the latest `FallingNotes-x.y.z.dmg` from [Releases](https://github.com/diegozamarron/FallingNotes/releases),
-open it, and drag **FallingNotes** onto **Applications**. Works on Apple Silicon and Intel Macs running macOS 14 or later.
+open it, and drag **FallingNotes** onto **Applications**. Requires an Apple Silicon Mac (M1 or later) running macOS 14 or later. Intel Macs are not supported.
 
 The app isn't signed with a paid Apple Developer certificate, so the first time you open it macOS will say it can't
 check it for malware. Either open **System Settings → Privacy & Security**, scroll down and click **Open Anyway**,
@@ -23,7 +23,7 @@ or run `xattr -dr com.apple.quarantine /Applications/FallingNotes.app` once.
 
 ## Build
 
-Requires macOS 14+, Xcode (or the Swift toolchain), and `nasm` (`brew install nasm`) for the Intel build of x264.
+Requires an Apple Silicon Mac, macOS 14+, and Xcode (or the Swift toolchain).
 
 ```sh
 ./build.sh          # builds libx264 the first time (about 30 s), then FallingNotes.app (ad-hoc signed)
@@ -32,7 +32,7 @@ open FallingNotes.app
 
 To regenerate the app icon: `Tools/make_icon.sh`.
 
-To make a release: bump `VERSION`, run `Tools/make_dmg.sh` (builds a universal app and `dist/FallingNotes-<version>.dmg`),
+To make a release: bump `VERSION`, run `Tools/make_dmg.sh` (builds the app and `dist/FallingNotes-<version>.dmg`),
 then `gh release create v<version> dist/FallingNotes-<version>.dmg`.
 
 ## Use

@@ -1,10 +1,10 @@
 #!/bin/bash
-# Builds a universal FallingNotes.app and packs it into dist/FallingNotes-<version>.dmg
+# Builds FallingNotes.app (Apple Silicon) and packs it into dist/FallingNotes-<version>.dmg
 # (a disk image with the app and an Applications shortcut to drag it onto).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-UNIVERSAL=1 ./build.sh
+./build.sh
 VERSION="$(cat VERSION)"
 DMG="dist/FallingNotes-$VERSION.dmg"
 

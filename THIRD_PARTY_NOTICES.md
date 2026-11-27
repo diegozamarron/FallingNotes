@@ -11,7 +11,7 @@ version 3 or later** (see `LICENSE`), which is compatible with x264's "version 2
 - Version used: x264 `stable` branch, revision 3222, commit `b35605ace3ddf7c1a5d67a2eb553f034aef41d55`.
 - Source: https://code.videolan.org/videolan/x264 at that commit. The exact source archive used for each release is
   attached to that release on GitHub (`x264-b35605a-source.tar.gz`).
-- How it is built: `Tools/build_x264.sh` (a static, 8-bit, universal library with no changes to x264's source).
+- How it is built: `Tools/build_x264.sh` (a static, 8-bit Apple Silicon library with no changes to x264's source).
 
 ## Apple system frameworks
 
