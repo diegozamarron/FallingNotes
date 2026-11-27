@@ -1,0 +1,10 @@
+# Build output
+.build/
+FallingNotes.app/
+
+# macOS
+.DS_Store
+
+# MIDI files are usually someone else's music: keep them out of the repo
+*.mid
+*.midi
