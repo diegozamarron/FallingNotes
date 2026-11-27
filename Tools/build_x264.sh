@@ -1,4 +1,6 @@
 #!/bin/bash
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Diego Zamarron
 # Builds a static libx264 for Apple Silicon into ThirdParty/x264/{include,lib}.
 # x264 is GPL-2.0-or-later, which is why Falling Notes as a whole is GPL-3.0-or-later (see LICENSE).
 # Needs: git and clang (Xcode).

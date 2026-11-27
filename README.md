@@ -66,6 +66,8 @@ The numbers are instrument positions in the list the command prints.
 
 ## License
 
+Copyright (C) 2026 Diego Zamarron.
+
 Falling Notes is free software under the **GNU General Public License, version 3 or later** (see [LICENSE](LICENSE)).
 It includes the [x264](https://www.videolan.org/developers/x264.html) encoder (GPL-2.0-or-later); see
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). The exact x264 source used for each release is attached to that release.

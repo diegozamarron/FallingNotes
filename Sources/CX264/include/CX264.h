@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Diego Zamarron
 // A small C wrapper around libx264 (GPL-2.0-or-later), so Swift can use it without the version-mangled macros.
 #ifndef CX264_H
 #define CX264_H

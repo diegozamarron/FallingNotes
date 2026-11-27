@@ -1,4 +1,6 @@
 #!/bin/bash
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Diego Zamarron
 # Regenerates Resources/AppIcon.icns from Tools/make_icon.swift. build.sh copies the result into the app.
 set -euo pipefail
 cd "$(dirname "$0")/.."

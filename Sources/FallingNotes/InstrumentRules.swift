@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Diego Zamarron
 import Foundation
 
 /// Picks an instrument from a track's name when the file's own program number is vague or missing.

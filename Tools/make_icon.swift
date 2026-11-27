@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Diego Zamarron
 // Draws the app icon (falling notes landing on a piano keyboard) as a 1024x1024 PNG.
 // usage: swift Tools/make_icon.swift out.png   (Tools/make_icon.sh turns it into Resources/AppIcon.icns)
 import CoreGraphics

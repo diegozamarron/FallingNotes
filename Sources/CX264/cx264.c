@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Diego Zamarron
 // A small C wrapper around libx264 (GPL-2.0-or-later). See CX264.h.
 #include "CX264.h"
 #include "x264.h"
