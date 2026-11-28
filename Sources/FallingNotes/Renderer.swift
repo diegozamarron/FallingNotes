@@ -38,7 +38,7 @@ enum VisualMode: String, CaseIterable, Identifiable {
         switch self {
         case .simple: return "Flat colours. Clean and very readable."
         case .polished: return "Shaded notes, glossy keys, a soft gradient background and a fade at the top."
-        case .cinematic: return "Everything in Polished plus light beams, sparks, a spotlight and a vignette. Made for presentations and videos."
+        case .cinematic: return "Polished plus neon notes, light pools and sparks at the keys, floating dust, a shifting background and a vignette. For presentations and videos."
         }
     }
 }
@@ -167,6 +167,22 @@ private func fillGradient(_ ctx: CGContext, _ colors: [CGColor], from a: CGPoint
 
 private func gray(_ v: CGFloat, _ a: CGFloat = 1) -> CGColor { CGColor(srgbRed: v, green: v, blue: v, alpha: a) }
 
+private func hsv(_ h: CGFloat, _ sat: CGFloat, _ v: CGFloat, _ a: CGFloat = 1) -> CGColor {
+    let hh = (h - floor(h)) * 6
+    let f = hh - floor(hh)
+    let p = v * (1 - sat), q = v * (1 - sat * f), u = v * (1 - sat * (1 - f))
+    let rgb: (CGFloat, CGFloat, CGFloat)
+    switch Int(hh) {
+    case 0: rgb = (v, u, p)
+    case 1: rgb = (q, v, p)
+    case 2: rgb = (p, v, u)
+    case 3: rgb = (p, q, v)
+    case 4: rgb = (u, p, v)
+    default: rgb = (v, p, q)
+    }
+    return CGColor(srgbRed: rgb.0, green: rgb.1, blue: rgb.2, alpha: a)
+}
+
 /// A repeatable pseudo-random number in 0..<1, so effects look the same in the preview and in every exported piece.
 private func hash01(_ a: Int, _ b: Int) -> CGFloat {
     var x = UInt64(truncatingIfNeeded: a) &* 0x9E3779B97F4A7C15 ^ UInt64(truncatingIfNeeded: b) &* 0xC2B2AE3D27D4EB4F
@@ -203,6 +219,26 @@ func drawFrame(_ ctx: CGContext, size: CGSize, videoTime: Double, song: Song, st
             // A soft spotlight on the keyboard.
             ctx.drawRadialGradient(g, startCenter: CGPoint(x: W / 2, y: waterH), startRadius: 0,
                                    endCenter: CGPoint(x: W / 2, y: waterH), endRadius: max(W * 0.55, waterH * 0.9), options: [])
+        }
+        if cinematic {
+            // The background slowly drifts through a few hues near the bottom...
+            let hue = 0.60 + 0.14 * CGFloat(sin(t * 0.08))
+            fillGradient(ctx, [hsv(hue, 0.7, 0.9, 0), hsv(hue, 0.7, 0.9, 0.16)],
+                         from: CGPoint(x: 0, y: waterH * 0.25), to: CGPoint(x: 0, y: waterH))
+            // ...and dust motes float slowly upward and twinkle.
+            ctx.setBlendMode(.plusLighter)
+            for m in 0..<70 {
+                let rx = hash01(m, 1), ry = hash01(m, 2), rs = hash01(m, 3), rp = hash01(m, 4)
+                var fy = ry - CGFloat(t) * (0.012 + rs * 0.022)
+                fy -= floor(fy)
+                let x = rx * W + CGFloat(sin(t * 0.4 + Double(rp) * 6.28)) * 14 * scale
+                let y = fy * waterH
+                let twinkle = 0.5 + 0.5 * CGFloat(sin(t * (0.8 + Double(rs) * 1.6) + Double(rp) * 6.28))
+                let r = (0.9 + rs * 2.0) * scale
+                ctx.setFillColor(gray(1, (0.06 + 0.26 * twinkle * rs) * CGFloat(sin(Double(fy) * .pi))))
+                ctx.fillEllipse(in: CGRect(x: x - r, y: y - r, width: r * 2, height: r * 2))
+            }
+            ctx.setBlendMode(.normal)
         }
         ctx.restoreGState()
     }
@@ -257,6 +293,17 @@ func drawFrame(_ ctx: CGContext, size: CGSize, videoTime: Double, song: Song, st
 
         let radius = min(w * 0.28, 7 * scale, rect.height / 2)
         let path = CGPath(roundedRect: rect, cornerWidth: radius, cornerHeight: radius, transform: nil)
+        if cinematic && !active && !isFaint && style.glow {
+            // Every note has a soft neon halo, not just the ones sounding.
+            for (grow, alpha) in [(7.0, 0.05), (3.5, 0.08)] as [(CGFloat, CGFloat)] {
+                let g = grow * scale
+                let hr = rect.insetBy(dx: -g, dy: -g)
+                let hrad = min(radius + g, hr.width / 2, hr.height / 2)
+                ctx.setFillColor(base.copy(alpha: alpha) ?? base)
+                ctx.addPath(CGPath(roundedRect: hr, cornerWidth: hrad, cornerHeight: hrad, transform: nil))
+                ctx.fillPath()
+            }
+        }
         if active && style.glow {
             // Cheap glow: a few translucent halos. (A real CG shadow runs a full-size blur per note per frame,
             // which dominated the cost on busy pieces.)
@@ -281,6 +328,14 @@ func drawFrame(_ ctx: CGContext, size: CGSize, videoTime: Double, song: Song, st
                          from: CGPoint(x: 0, y: rect.minY), to: CGPoint(x: 0, y: rect.maxY), locations: [0, 0.35, 1])
             ctx.setFillColor(gray(1, active ? 0.34 : 0.18))
             ctx.fill(CGRect(x: rect.minX + w * 0.14, y: rect.minY, width: w * 0.16, height: rect.height))
+            if cinematic {
+                // Neon look: a bright core down the middle and a hot leading edge at the bottom.
+                ctx.setFillColor(gray(1, active ? 0.30 : 0.14))
+                ctx.fill(CGRect(x: rect.midX - w * 0.07, y: rect.minY, width: w * 0.14, height: rect.height))
+                let capH = min(rect.height, 26 * scale)
+                fillGradient(ctx, [gray(1, 0), gray(1, active ? 0.65 : 0.4)],
+                             from: CGPoint(x: 0, y: rect.maxY - capH), to: CGPoint(x: 0, y: rect.maxY))
+            }
             ctx.restoreGState()
             ctx.addPath(path)
             ctx.setStrokeColor(lighten(base, 0.45).copy(alpha: active ? 0.85 : 0.5) ?? base)
@@ -309,20 +364,32 @@ func drawFrame(_ ctx: CGContext, size: CGSize, videoTime: Double, song: Song, st
     }
     if cinematic {
         ctx.setBlendMode(.plusLighter)
-        // Beams of light rising from every key that is sounding.
-        let beamH = waterH * 0.45
+        // Light pools and short flares at every key that is sounding. On busy passages they merge into a glow
+        // that follows the music along the keyboard instead of a forest of tall bars.
+        let flareH = waterH * 0.11
         for p in layout.lo...layout.hi {
             guard let c = activeColor[p] else { continue }
             let k = layout.keyX(p)
+            let cx = k.x + k.w / 2
+            if let g = CGGradient(colorsSpace: srgb, colors: [c.copy(alpha: 0.28) ?? c, c.copy(alpha: 0) ?? c] as CFArray, locations: nil) {
+                ctx.saveGState()
+                ctx.translateBy(x: cx, y: waterH)
+                ctx.scaleBy(x: 1, y: 0.5)   // a flattened pool of light on the strike line
+                ctx.drawRadialGradient(g, startCenter: .zero, startRadius: 0, endCenter: .zero, endRadius: k.w * 4.5, options: [])
+                ctx.restoreGState()
+            }
             ctx.saveGState()
-            ctx.clip(to: CGRect(x: k.x, y: waterH - beamH, width: k.w, height: beamH))
-            fillGradient(ctx, [c.copy(alpha: 0.65) ?? c, c.copy(alpha: 0) ?? c],
-                         from: CGPoint(x: 0, y: waterH), to: CGPoint(x: 0, y: waterH - beamH))
+            ctx.clip(to: CGRect(x: k.x - k.w * 0.3, y: waterH - flareH, width: k.w * 1.6, height: flareH))
+            fillGradient(ctx, [c.copy(alpha: 0.55) ?? c, c.copy(alpha: 0) ?? c],
+                         from: CGPoint(x: 0, y: waterH), to: CGPoint(x: 0, y: waterH - flareH))
             ctx.restoreGState()
         }
         // Sparks thrown up when a note starts.
         let life = 0.7
         var j = lowerBound(notes, start: t - life)
+        var onsets = 0
+        for q in j..<notes.count { if notes[q].start > t { break }; onsets += 1 }
+        let sparkCount = onsets > 60 ? 2 : (onsets > 25 ? 3 : 5)   // fewer per note on busy passages
         while j < notes.count, notes[j].start <= t {
             let n = notes[j]
             defer { j += 1 }
@@ -330,10 +397,10 @@ func drawFrame(_ ctx: CGContext, size: CGSize, videoTime: Double, song: Song, st
             let age = CGFloat((t - n.start) / life)
             let key = layout.keyX(n.pitch)
             let c = lighten(style.color(n.part), 0.45)
-            for q in 0..<5 {
+            for q in 0..<sparkCount {
                 let r1 = hash01(j, q * 3 + 1), r2 = hash01(j, q * 3 + 2), r3 = hash01(j, q * 3 + 3)
                 let x = key.x + key.w / 2 + (r1 - 0.5) * key.w * 2.2 * (0.4 + age)
-                let y = waterH - (6 + r2 * 70) * scale * (1 - (1 - age) * (1 - age)) - 2 * scale
+                let y = waterH - (6 + r2 * 90) * scale * (1 - (1 - age) * (1 - age)) - 2 * scale
                 let rad = (1.6 + r3 * 3.0) * scale * (1 - age * 0.7)
                 ctx.setFillColor(c.copy(alpha: (1 - age) * 0.9) ?? c)
                 ctx.fillEllipse(in: CGRect(x: x - rad, y: y - rad, width: rad * 2, height: rad * 2))
