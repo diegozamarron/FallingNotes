@@ -293,6 +293,9 @@ enum SegmentedExporter {
             AVVideoAllowFrameReorderingKey: false,
         ]
         if options.codec == .h264 { compression[AVVideoProfileLevelKey] = AVVideoProfileLevelH264HighAutoLevel }
+        // The hardware encoder starts each segment with a starved first frame that smears faint detail (thin lines
+        // dim for a moment at every join). A quality floor keeps that frame sharp.
+        if lane == .hardware { compression[AVVideoQualityKey] = 0.8 }
         let input = AVAssetWriterInput(mediaType: .video, outputSettings: [
             AVVideoCodecKey: options.codec == .hevc ? AVVideoCodecType.hevc : AVVideoCodecType.h264,
             AVVideoWidthKey: factory.width, AVVideoHeightKey: factory.height,
@@ -588,7 +591,7 @@ private final class SegmentURLs: @unchecked Sendable {
 /// Encoded segments kept on disk (in ~/Library/Caches) so exporting again with unchanged visuals is nearly instant.
 enum SegmentCache {
     /// Bump when the drawing code changes in a way that alters frames, so old segments are not reused.
-    static let renderRevision = 3
+    static let renderRevision = 4
     static let maxBytes: Int64 = 2 * 1024 * 1024 * 1024
 
     static var directory: URL {
