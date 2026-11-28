@@ -209,6 +209,7 @@ if let i = args.firstIndex(of: "--export"), args.count > i + 2 {
             var style = Style()
             style.hidden = Set(list("--hide"))
             style.faint = Set(list("--faint"))
+            if let l = args.firstIndex(of: "--look"), args.count > l + 1, let m = VisualMode(rawValue: args[l + 1]) { style.mode = m }
             var audio = AudioSettings.defaults(for: song)
             for i in list("--mute") where i < audio.audible.count { audio.audible[i] = false }
             // --volume 0=0.5,2=1.2  (part index = gain, 1 is normal)

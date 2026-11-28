@@ -238,7 +238,7 @@ func drawFrame(_ ctx: CGContext, size: CGSize, videoTime: Double, song: Song, st
 
     // Faint octave lines on the waterfall. Snapped to whole pixels and drawn as crisp rectangles: a thin,
     // faint, anti-aliased line sits across two pixel columns, which a video encoder renders as a shimmer.
-    ctx.setFillColor(CGColor(gray: 1, alpha: rich ? 0.07 : 0.06))
+    ctx.setFillColor(CGColor(gray: 1, alpha: rich ? 0.11 : 0.08))
     let lineW = max(1, scale.rounded())
     for p in layout.lo...layout.hi where p % 12 == 0 {
         ctx.fill(CGRect(x: layout.keyX(p).x.rounded(), y: 0, width: lineW, height: waterH))
@@ -434,14 +434,13 @@ func drawFrame(_ ctx: CGContext, size: CGSize, videoTime: Double, song: Song, st
             }
         }
     }
-    ctx.setStrokeColor(rich ? gray(0.62) : CGColor(gray: 0.45, alpha: 1))
-    ctx.setLineWidth(max(1, scale))
+    // Key separators: whole-pixel filled rects. A 1px stroke at a fractional x is bright where it lands on one
+    // pixel column and half as bright where it straddles two, so neighbouring keys' outlines would alternate.
+    ctx.setFillColor(rich ? gray(0.62) : CGColor(gray: 0.45, alpha: 1))
+    let sepW = max(1, scale.rounded())
     for p in layout.lo...layout.hi where !isBlack(p) && p != layout.lo {
-        let x = layout.keyX(p).x
-        ctx.move(to: CGPoint(x: x, y: whiteTop))
-        ctx.addLine(to: CGPoint(x: x, y: whiteTop + kbH))
+        ctx.fill(CGRect(x: layout.keyX(p).x.rounded(), y: whiteTop, width: sepW, height: kbH))
     }
-    ctx.strokePath()
 
     if rich {
         // The felt strip casts a soft shadow onto the keys.
@@ -455,7 +454,8 @@ func drawFrame(_ ctx: CGContext, size: CGSize, videoTime: Double, song: Song, st
     var activeBlack: [(CGRect, CGColor, Bool)] = []   // (key, colour, idle)
     for p in layout.lo...layout.hi where isBlack(p) {
         let k = layout.keyX(p)
-        let r = CGRect(x: k.x, y: whiteTop, width: k.w, height: blackH)
+        let bx = k.x.rounded(), bx2 = (k.x + k.w).rounded()
+        let r = CGRect(x: bx, y: whiteTop, width: bx2 - bx, height: blackH)   // whole-pixel edges: same sharpness on every key
         if let c = activeColor[p] {
             activeBlack.append((r, lit[p] < 1 ? mix(gray(0.09), darken(c, 0.25), lit[p]) : darken(c, 0.25), false))
         } else if rich {

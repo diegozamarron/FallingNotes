@@ -588,7 +588,7 @@ private final class SegmentURLs: @unchecked Sendable {
 /// Encoded segments kept on disk (in ~/Library/Caches) so exporting again with unchanged visuals is nearly instant.
 enum SegmentCache {
     /// Bump when the drawing code changes in a way that alters frames, so old segments are not reused.
-    static let renderRevision = 2
+    static let renderRevision = 3
     static let maxBytes: Int64 = 2 * 1024 * 1024 * 1024
 
     static var directory: URL {
