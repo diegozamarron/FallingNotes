@@ -310,13 +310,13 @@ func drawFrame(_ ctx: CGContext, size: CGSize, videoTime: Double, song: Song, st
     if cinematic {
         ctx.setBlendMode(.plusLighter)
         // Beams of light rising from every key that is sounding.
-        let beamH = waterH * 0.38
+        let beamH = waterH * 0.45
         for p in layout.lo...layout.hi {
             guard let c = activeColor[p] else { continue }
             let k = layout.keyX(p)
             ctx.saveGState()
             ctx.clip(to: CGRect(x: k.x, y: waterH - beamH, width: k.w, height: beamH))
-            fillGradient(ctx, [c.copy(alpha: 0.45) ?? c, c.copy(alpha: 0) ?? c],
+            fillGradient(ctx, [c.copy(alpha: 0.65) ?? c, c.copy(alpha: 0) ?? c],
                          from: CGPoint(x: 0, y: waterH), to: CGPoint(x: 0, y: waterH - beamH))
             ctx.restoreGState()
         }
@@ -334,7 +334,7 @@ func drawFrame(_ ctx: CGContext, size: CGSize, videoTime: Double, song: Song, st
                 let r1 = hash01(j, q * 3 + 1), r2 = hash01(j, q * 3 + 2), r3 = hash01(j, q * 3 + 3)
                 let x = key.x + key.w / 2 + (r1 - 0.5) * key.w * 2.2 * (0.4 + age)
                 let y = waterH - (6 + r2 * 70) * scale * (1 - (1 - age) * (1 - age)) - 2 * scale
-                let rad = (1.0 + r3 * 2.2) * scale * (1 - age * 0.7)
+                let rad = (1.6 + r3 * 3.0) * scale * (1 - age * 0.7)
                 ctx.setFillColor(c.copy(alpha: (1 - age) * 0.9) ?? c)
                 ctx.fillEllipse(in: CGRect(x: x - rad, y: y - rad, width: rad * 2, height: rad * 2))
             }
