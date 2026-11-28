@@ -40,7 +40,7 @@ enum VisualMode: String, CaseIterable, Identifiable {
         switch self {
         case .simple: return "Flat colours. Clean and very readable."
         case .polished: return "Clean flat notes, glossy keys, a soft gradient background and a fade at the top."
-        case .cinematic: return "Polished with the keyboard as the light source: notes come out of the dark, sounding keys glow, the lighting slowly shifts colour, soft vignette. For presentations and videos."
+        case .cinematic: return "Polished with the keyboard as the light source: notes come out of the dark, sounding keys glow, the lighting slowly shifts colour, embers on note starts, soft vignette. For presentations and videos."
         }
     }
 }
@@ -188,6 +188,15 @@ private func hsv(_ h: CGFloat, _ sat: CGFloat, _ v: CGFloat, _ a: CGFloat = 1) -
     default: rgb = (v, p, q)
     }
     return CGColor(srgbRed: rgb.0, green: rgb.1, blue: rgb.2, alpha: a)
+}
+
+/// A repeatable pseudo-random number in 0..<1, so effects look the same in the preview and in every exported piece.
+private func hash01(_ a: Int, _ b: Int) -> CGFloat {
+    var x = UInt64(truncatingIfNeeded: a) &* 0x9E3779B97F4A7C15 ^ UInt64(truncatingIfNeeded: b) &* 0xC2B2AE3D27D4EB4F
+    x ^= x >> 29
+    x = x &* 0xBF58476D1CE4E5B9
+    x ^= x >> 32
+    return CGFloat(x % 10000) / 10000
 }
 
 /// Draws one frame. `ctx` must use a top-left origin (y grows downward).
@@ -349,6 +358,44 @@ func drawFrame(_ ctx: CGContext, size: CGSize, videoTime: Double, song: Song, st
             ctx.restoreGState()
             ctx.setFillColor(lighten(c, 0.6).copy(alpha: 0.9 * a) ?? c)
             ctx.fill(CGRect(x: k.x, y: waterH - 2 * scale, width: k.w, height: 2 * scale))
+        }
+        // Embers kicked up when a note starts. They behave like real ones: thrown up in a narrow cone at different
+        // speeds, slowed by drag, pulled down by gravity, drawn as short streaks along their path (not dots),
+        // hot white-yellow at first and cooling to the note's colour as they die.
+        let maxLife = 0.6
+        var j = lowerBound(notes, start: t - maxLife)
+        var onsets = 0
+        for q in j..<notes.count { if notes[q].start > t { break }; onsets += 1 }
+        let emberCount = onsets > 40 ? 1 : (onsets > 15 ? 2 : 4)
+        ctx.setLineCap(.round)
+        while j < notes.count, notes[j].start <= t {
+            let n = notes[j]
+            defer { j += 1 }
+            guard layout.contains(n.pitch), !style.hidden.contains(n.part), !style.faint.contains(n.part) else { continue }
+            let age = t - n.start
+            let key = layout.keyX(n.pitch)
+            let cool = lighten(style.color(n.part), 0.35)
+            let hot = CGColor(srgbRed: 1, green: 0.93, blue: 0.75, alpha: 1)
+            for q in 0..<emberCount {
+                let life = 0.22 + Double(hash01(j, q * 5 + 3)) * (maxLife - 0.22)
+                guard age < life else { continue }
+                let spread = (hash01(j, q * 5 + 1) - 0.5) * 0.9              // radians off vertical
+                let speed = (160 + hash01(j, q * 5 + 2) * hash01(j, q * 5 + 2) * 620) * scale   // mostly slow, a few fast
+                let x0 = key.x + key.w * (0.25 + hash01(j, q * 5 + 4) * 0.5)
+                func position(_ a: Double) -> CGPoint {
+                    let d = CGFloat(1 - exp(-a * 3.2)) / 3.2                       // drag
+                    let g = 0.5 * 520 * scale * CGFloat(a * a)                    // gravity
+                    return CGPoint(x: x0 + sin(spread) * speed * d, y: waterH - 2 * scale - cos(spread) * speed * d + g)
+                }
+                let head = position(age), tail = position(max(age - 0.07, 0))
+                let life01 = CGFloat(age / life)
+                let size = (1.3 + hash01(j, q * 5 + 5) * 1.8) * scale
+                ctx.setStrokeColor(mix(hot, cool, min(1, life01 * 1.8)).copy(alpha: pow(1 - life01, 0.9)) ?? cool)
+                ctx.setLineWidth(size * (1 - life01 * 0.5))
+                ctx.move(to: tail)
+                ctx.addLine(to: head)
+                ctx.strokePath()
+            }
         }
         ctx.setBlendMode(.normal)
         // Vignette.
