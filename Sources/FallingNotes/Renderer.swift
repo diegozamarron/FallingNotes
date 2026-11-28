@@ -236,15 +236,13 @@ func drawFrame(_ ctx: CGContext, size: CGSize, videoTime: Double, song: Song, st
         ctx.restoreGState()
     }
 
-    // Faint octave lines on the waterfall.
-    ctx.setStrokeColor(CGColor(gray: 1, alpha: 0.06))
-    ctx.setLineWidth(max(1, scale))
+    // Faint octave lines on the waterfall. Snapped to whole pixels and drawn as crisp rectangles: a thin,
+    // faint, anti-aliased line sits across two pixel columns, which a video encoder renders as a shimmer.
+    ctx.setFillColor(CGColor(gray: 1, alpha: rich ? 0.07 : 0.06))
+    let lineW = max(1, scale.rounded())
     for p in layout.lo...layout.hi where p % 12 == 0 {
-        let x = layout.keyX(p).x
-        ctx.move(to: CGPoint(x: x, y: 0))
-        ctx.addLine(to: CGPoint(x: x, y: waterH))
+        ctx.fill(CGRect(x: layout.keyX(p).x.rounded(), y: 0, width: lineW, height: waterH))
     }
-    ctx.strokePath()
 
     // Falling notes.
     var activeColor = [CGColor?](repeating: nil, count: 128)
