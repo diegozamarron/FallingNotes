@@ -613,7 +613,7 @@ enum SegmentCache {
         put(w); put(hgt); put(options.fps); put(options.codec.rawValue); put(options.videoBitrate)
         put(start); put(count)
         put(style.fallSeconds); put(style.background); put(style.fullKeyboard ? 1 : 0); put(style.glow ? 1 : 0)
-        put(Double(style.faintOpacity)); put(style.mode.rawValue)
+        put(Double(style.faintOpacity)); put(style.mode.rawValue); put(style.keyFade)
         put(style.legendCorner.rawValue)
         for e in style.legend { put(e.title); put(e.color); put(e.faint ? 1 : 0) }
         let layout = KeyLayout(song: song, fullKeyboard: style.fullKeyboard, width: CGFloat(w))

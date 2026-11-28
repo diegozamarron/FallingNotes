@@ -581,6 +581,13 @@ struct LookCard: View {
                         .font(.system(size: 10.5)).foregroundStyle(.tertiary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
+                if model.visualMode != .simple {
+                    SettingRow("Key fade") {
+                        Slider(value: $model.keyFade, in: 0...1.5).frame(width: 130).controlSize(.small)
+                        Text(model.keyFade < 0.05 ? "off" : String(format: "%.1fs", model.keyFade))
+                            .font(.system(size: 11)).monospacedDigit().foregroundStyle(.secondary).frame(width: 32, alignment: .trailing)
+                    }
+                }
                 SettingRow("Fall time") {
                     Slider(value: $model.fallSeconds, in: 1...3).frame(width: 130).controlSize(.small)
                     Text(String(format: "%.1fs", model.fallSeconds))

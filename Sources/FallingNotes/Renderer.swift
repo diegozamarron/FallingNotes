@@ -17,6 +17,8 @@ struct Style {
     var legend: [LegendEntry] = []
     var legendCorner: LegendCorner = .topLeft
     var mode: VisualMode = .simple
+    /// How long a key takes to fade out after its note ends (Polished and Cinematic).
+    var keyFade: Double = 0.3
 
     func color(_ index: Int) -> CGColor {
         trackColors.isEmpty ? Palette.defaults[0] : trackColors[index % trackColors.count]
@@ -37,8 +39,8 @@ enum VisualMode: String, CaseIterable, Identifiable {
     var detail: String {
         switch self {
         case .simple: return "Flat colours. Clean and very readable."
-        case .polished: return "Shaded notes, glossy keys, a soft gradient background and a fade at the top."
-        case .cinematic: return "Polished with the keyboard as the light source: notes come out of the dark, sounding keys glow, sparks on calm passages, soft vignette. For presentations and videos."
+        case .polished: return "Clean flat notes, glossy keys, a soft gradient background and a fade at the top."
+        case .cinematic: return "Polished with the keyboard as the light source: notes come out of the dark, sounding keys glow, the lighting slowly shifts colour, soft vignette. For presentations and videos."
         }
     }
 }
@@ -188,15 +190,6 @@ private func hsv(_ h: CGFloat, _ sat: CGFloat, _ v: CGFloat, _ a: CGFloat = 1) -
     return CGColor(srgbRed: rgb.0, green: rgb.1, blue: rgb.2, alpha: a)
 }
 
-/// A repeatable pseudo-random number in 0..<1, so effects look the same in the preview and in every exported piece.
-private func hash01(_ a: Int, _ b: Int) -> CGFloat {
-    var x = UInt64(truncatingIfNeeded: a) &* 0x9E3779B97F4A7C15 ^ UInt64(truncatingIfNeeded: b) &* 0xC2B2AE3D27D4EB4F
-    x ^= x >> 29
-    x = x &* 0xBF58476D1CE4E5B9
-    x ^= x >> 32
-    return CGFloat(x % 10000) / 10000
-}
-
 /// Draws one frame. `ctx` must use a top-left origin (y grows downward).
 /// `videoTime` is the position on the preview/export timeline (0 = start of lead-in).
 func drawFrame(_ ctx: CGContext, size: CGSize, videoTime: Double, song: Song, style: Style) {
@@ -225,6 +218,12 @@ func drawFrame(_ ctx: CGContext, size: CGSize, videoTime: Double, song: Song, st
             ctx.drawRadialGradient(g, startCenter: CGPoint(x: W / 2, y: waterH), startRadius: 0,
                                    endCenter: CGPoint(x: W / 2, y: waterH), endRadius: max(W * 0.55, waterH * 0.9), options: [])
         }
+        if cinematic {
+            // The light at the bottom slowly drifts through a few hues over the length of the song.
+            let hue = 0.60 + 0.14 * CGFloat(sin(t * 0.08))
+            fillGradient(ctx, [hsv(hue, 0.7, 0.9, 0), hsv(hue, 0.7, 0.9, 0.16)],
+                         from: CGPoint(x: 0, y: waterH * 0.25), to: CGPoint(x: 0, y: waterH))
+        }
         ctx.restoreGState()
     }
 
@@ -241,7 +240,7 @@ func drawFrame(_ ctx: CGContext, size: CGSize, videoTime: Double, song: Song, st
     // Falling notes.
     var activeColor = [CGColor?](repeating: nil, count: 128)
     var lit = [CGFloat](repeating: 0, count: 128)   // 1 while a key sounds, then fades out after it is released
-    let release = 0.3
+    let release = rich ? max(style.keyFade, 0) : 0
     ctx.saveGState()
     ctx.clip(to: CGRect(x: 0, y: 0, width: W, height: waterH))
     let notes = song.notes
@@ -263,7 +262,7 @@ func drawFrame(_ ctx: CGContext, size: CGSize, videoTime: Double, song: Song, st
     while i < notes.count, notes[i].start <= t + style.fallSeconds {
         let n = notes[i]
         i += 1
-        if cinematic, pass == 1, n.end < t, n.end >= t - release, layout.contains(n.pitch),
+        if release > 0, pass == 1, n.end < t, n.end >= t - release, layout.contains(n.pitch),
            !style.hidden.contains(n.part), !style.faint.contains(n.part) {
             // Just released: the key fades out instead of switching off.
             let amount = 1 - CGFloat((t - n.end) / release)
@@ -303,18 +302,10 @@ func drawFrame(_ ctx: CGContext, size: CGSize, videoTime: Double, song: Song, st
             }
         }
         if rich {
-            // Shaded body: light at the top, deeper at the bottom, with a glossy stripe down the left.
-            ctx.saveGState()
+            // Clean: one flat colour, no outline or texture. Sounding notes are simply brighter.
+            ctx.setFillColor(color)
             ctx.addPath(path)
-            ctx.clip()
-            fillGradient(ctx, [lighten(color, 0.30), color, darken(color, 0.14)],
-                         from: CGPoint(x: 0, y: rect.minY), to: CGPoint(x: 0, y: rect.maxY), locations: [0, 0.35, 1])
-            ctx.setFillColor(gray(1, active ? 0.34 : 0.18))
-            ctx.fill(CGRect(x: rect.minX + w * 0.14, y: rect.minY, width: w * 0.16, height: rect.height))
-            ctx.restoreGState()
-            ctx.addPath(path)
-            ctx.setStrokeColor(lighten(base, 0.45).copy(alpha: active ? 0.85 : 0.5) ?? base)
-            ctx.strokePath()
+            ctx.fillPath()
         } else {
             ctx.setFillColor(color)
             ctx.setStrokeColor(strokeColors.isEmpty ? base : strokeColors[n.part % strokeColors.count])
@@ -358,28 +349,6 @@ func drawFrame(_ ctx: CGContext, size: CGSize, videoTime: Double, song: Song, st
             ctx.restoreGState()
             ctx.setFillColor(lighten(c, 0.6).copy(alpha: 0.9 * a) ?? c)
             ctx.fill(CGRect(x: k.x, y: waterH - 2 * scale, width: k.w, height: 2 * scale))
-        }
-        // Sparks thrown up when a note starts.
-        let life = 0.7
-        var j = lowerBound(notes, start: t - life)
-        var onsets = 0
-        for q in j..<notes.count { if notes[q].start > t { break }; onsets += 1 }
-        let sparkCount = onsets > 30 ? 0 : (onsets > 12 ? 2 : 4)   // sparks thin out and stop as the music gets dense
-        while j < notes.count, notes[j].start <= t {
-            let n = notes[j]
-            defer { j += 1 }
-            guard layout.contains(n.pitch), !style.hidden.contains(n.part), !style.faint.contains(n.part) else { continue }
-            let age = CGFloat((t - n.start) / life)
-            let key = layout.keyX(n.pitch)
-            let c = lighten(style.color(n.part), 0.45)
-            for q in 0..<sparkCount {
-                let r1 = hash01(j, q * 3 + 1), r2 = hash01(j, q * 3 + 2), r3 = hash01(j, q * 3 + 3)
-                let x = key.x + key.w / 2 + (r1 - 0.5) * key.w * 2.2 * (0.4 + age)
-                let y = waterH - (6 + r2 * 90) * scale * (1 - (1 - age) * (1 - age)) - 2 * scale
-                let rad = (1.4 + r3 * 2.2) * scale * (1 - age * 0.7)
-                ctx.setFillColor(c.copy(alpha: (1 - age) * 0.9) ?? c)
-                ctx.fillEllipse(in: CGRect(x: x - rad, y: y - rad, width: rad * 2, height: rad * 2))
-            }
         }
         ctx.setBlendMode(.normal)
         // Vignette.

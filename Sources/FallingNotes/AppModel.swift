@@ -65,6 +65,7 @@ final class AppModel: ObservableObject {
     @Published var fullKeyboard = true
     @Published var glow = true
     @Published var visualMode: VisualMode = .simple
+    @Published var keyFade = 0.3
     @Published var faintOpacity = 0.3
     @Published var showKey = false
     @Published var keyCorner: LegendCorner = .topLeft
@@ -115,6 +116,7 @@ final class AppModel: ObservableObject {
         s.fullKeyboard = fullKeyboard
         s.glow = glow
         s.mode = visualMode
+        s.keyFade = keyFade
         s.hidden = Set(parts.indices.filter { parts[$0].look == .hidden })
         s.faint = Set(parts.indices.filter { parts[$0].look == .faint })
         s.faintOpacity = CGFloat(faintOpacity)
