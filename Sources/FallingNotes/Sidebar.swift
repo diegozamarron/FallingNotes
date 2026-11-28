@@ -679,9 +679,19 @@ struct ExportCard: View {
                 }
 
                 if let p = model.exportProgress, let start = model.exportStart {
+                    if let job = model.currentJob {
+                        Text(job.name).font(.system(size: 11, weight: .medium)).lineLimit(1).truncationMode(.middle)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
                     ExportProgressView(progress: p, start: start, videoStart: model.exportVideoStart,
-                                       totalFrames: model.song.map { model.exportOptions.frameCount(duration: $0.totalDuration) } ?? 0)
-                    Button("Cancel") { model.cancelExport() }.controlSize(.small)
+                                       totalFrames: model.currentJob.map { $0.options.frameCount(duration: $0.song.totalDuration) } ?? 0)
+                    HStack {
+                        Button { model.startExport() } label: { Label("Add to Queue…", systemImage: "text.badge.plus") }
+                            .controlSize(.small).disabled(model.song == nil)
+                            .help("Queue another export with the current settings. It starts when this one finishes.")
+                        Spacer(minLength: 0)
+                        Button("Cancel") { model.cancelExport() }.controlSize(.small)
+                    }
                 } else {
                     Button { model.startExport() } label: {
                         Label("Export Video…", systemImage: "film").frame(maxWidth: .infinity)
@@ -689,6 +699,29 @@ struct ExportCard: View {
                     .buttonStyle(.borderedProminent)
                     .controlSize(.large)
                     .disabled(model.song == nil)
+                }
+                if !model.exportQueue.isEmpty {
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Text("Up next (\(model.exportQueue.count))").font(.system(size: 11, weight: .semibold))
+                            Spacer(minLength: 0)
+                            Button("Clear") { model.clearQueue() }.controlSize(.mini)
+                        }
+                        ForEach(Array(model.exportQueue.enumerated()), id: \.element.id) { i, job in
+                            HStack(spacing: 6) {
+                                Text("\(i + 1)").foregroundStyle(.secondary).frame(width: 14)
+                                VStack(alignment: .leading, spacing: 0) {
+                                    Text(job.name).lineLimit(1).truncationMode(.middle)
+                                    Text("\(job.options.resolution.label) · \(job.options.fps) fps · \(job.style.mode.label)")
+                                        .font(.system(size: 10)).foregroundStyle(.secondary)
+                                }
+                                Spacer(minLength: 0)
+                                Button { model.removeQueued(job.id) } label: { Image(systemName: "xmark.circle.fill") }
+                                    .buttonStyle(.plain).foregroundStyle(.secondary).help("Remove from the queue")
+                            }
+                        }
+                    }
+                    .font(.system(size: 11))
                 }
                 if model.cacheBytes > 1_000_000 {
                     HStack(spacing: 6) {

@@ -48,6 +48,18 @@ final class Transport: ObservableObject {
     @Published var scrubTime = 0.0
 }
 
+/// Everything an export needs, captured when it was queued so later changes to the settings don't affect it.
+struct ExportJob: Identifiable, @unchecked Sendable {
+    let id = UUID()
+    let name: String
+    let song: Song
+    let style: Style
+    let audio: AudioSettings
+    let options: ExportOptions
+    let config: HybridConfig
+    let url: URL
+}
+
 @MainActor
 final class AppModel: ObservableObject {
     @Published var song: Song?
@@ -84,6 +96,8 @@ final class AppModel: ObservableObject {
     @Published var exportProgress: Double?
     @Published var exportStart: Date?          // when the export began (includes preparing the audio)
     @Published var exportVideoStart: Date?     // when the first video frames were done; used for the time estimate
+    @Published var exportQueue: [ExportJob] = []   // waiting to run, in order
+    @Published var currentJob: ExportJob?          // the export in progress
     @Published var lastExport: URL?
     @Published var lastExportSummary: String?
 
@@ -327,24 +341,38 @@ final class AppModel: ObservableObject {
 
     // MARK: Export
 
-    /// Asks where to save (unless `destination` is given, which the test hook uses) and renders the video.
+    /// Asks where to save (unless `destination` is given, which the test hook uses), then renders the video now,
+    /// or, when an export is already running, adds it to the queue with the settings as they are at this moment.
     func startExport(to destination: URL? = nil) {
-        guard let song, exportProgress == nil else { return }
-        pause()
+        guard let song else { return }
         let url: URL
         if let destination {
             url = destination
         } else {
+            pause()
             let panel = NSSavePanel()
             panel.allowedContentTypes = [.mpeg4Movie, .quickTimeMovie]
-            panel.nameFieldStringValue = song.url.deletingPathExtension().lastPathComponent + ".mp4"
+            var base = song.url.deletingPathExtension().lastPathComponent
+            if exportProgress != nil || !exportQueue.isEmpty { base += " (\(exportQueue.count + 2))" }
+            panel.nameFieldStringValue = base + ".mp4"
             guard panel.runModal() == .OK, let chosen = panel.url else { return }
             url = chosen
         }
-
         let options = exportOptions
-        let style = self.style
-        let audio = self.audioSettings
+        let job = ExportJob(name: url.lastPathComponent, song: song, style: style, audio: audioSettings, options: options,
+                            config: SegmentedExporter.plan(codec: options.codec, mode: encodingMode), url: url)
+        exportQueue.append(job)
+        if exportProgress == nil { runNextJob() }
+    }
+
+    func removeQueued(_ id: UUID) { exportQueue.removeAll { $0.id == id } }
+    func clearQueue() { exportQueue.removeAll() }
+
+    private func runNextJob() {
+        guard exportProgress == nil, !exportQueue.isEmpty else { return }
+        let job = exportQueue.removeFirst()
+        currentJob = job
+        let (song, style, audio, options, config, url) = (job.song, job.style, job.audio, job.options, job.config, job.url)
         let model = self
         exportProgress = 0
         exportStart = Date()
@@ -353,7 +381,6 @@ final class AppModel: ObservableObject {
         lastExportSummary = nil
         // Detached so the render loop runs on a background thread. A plain `Task {}` here would inherit the main
         // actor and freeze the whole window for the length of the export.
-        let config = SegmentedExporter.plan(codec: options.codec, mode: encodingMode)
         exportTask = Task.detached(priority: .userInitiated) {
             let report: @Sendable (Double) -> Void = { p in Task { @MainActor in model.exportUpdate(p) } }
             do {
@@ -371,7 +398,7 @@ final class AppModel: ObservableObject {
             } catch is CancellationError {
                 await MainActor.run { model.exportEnded() }   // cancelled by the user
             } catch {
-                let message = error.localizedDescription
+                let message = "\(job.name): \(error.localizedDescription)"
                 await MainActor.run { model.errorMessage = message; model.exportEnded() }
             }
         }
@@ -433,6 +460,8 @@ final class AppModel: ObservableObject {
         exportProgress = nil
         exportStart = nil
         exportVideoStart = nil
+        currentJob = nil
+        runNextJob()   // the next queued export, if any
     }
 
     func cancelExport() { exportTask?.cancel() }
