@@ -64,6 +64,7 @@ final class AppModel: ObservableObject {
     @Published var fallSeconds = 2.0
     @Published var fullKeyboard = true
     @Published var glow = true
+    @Published var visualMode: VisualMode = .simple
     @Published var faintOpacity = 0.3
     @Published var showKey = false
     @Published var keyCorner: LegendCorner = .topLeft
@@ -113,6 +114,7 @@ final class AppModel: ObservableObject {
         s.trackColors = parts.map { NSColor($0.color).usingColorSpace(.sRGB)?.cgColor ?? Palette.defaults[0] }
         s.fullKeyboard = fullKeyboard
         s.glow = glow
+        s.mode = visualMode
         s.hidden = Set(parts.indices.filter { parts[$0].look == .hidden })
         s.faint = Set(parts.indices.filter { parts[$0].look == .faint })
         s.faintOpacity = CGFloat(faintOpacity)

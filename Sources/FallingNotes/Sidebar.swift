@@ -541,6 +541,15 @@ struct LookCard: View {
     var body: some View {
         Card("Look", icon: "paintbrush") {
             VStack(spacing: 10) {
+                SettingRow("Video style") {
+                    Picker("", selection: $model.visualMode) {
+                        ForEach(VisualMode.allCases) { Text($0.label).tag($0) }
+                    }
+                    .labelsHidden().pickerStyle(.segmented).frame(width: 190).controlSize(.small)
+                }
+                Text(model.visualMode.detail)
+                    .font(.system(size: 10.5)).foregroundStyle(.tertiary)
+                    .fixedSize(horizontal: false, vertical: true)
                 SettingRow("Fall time") {
                     Slider(value: $model.fallSeconds, in: 1...3).frame(width: 130).controlSize(.small)
                     Text(String(format: "%.1fs", model.fallSeconds))
