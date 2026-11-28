@@ -39,6 +39,7 @@ struct PartState {
     var audible: Bool
     var volume: Double = 1     // 0...1.5
     var color: Color
+    var title = ""             // what the key calls this instrument; empty = the instrument's own name
 }
 
 @MainActor
@@ -64,6 +65,11 @@ final class AppModel: ObservableObject {
     @Published var fullKeyboard = true
     @Published var glow = true
     @Published var faintOpacity = 0.3
+    @Published var showKey = false
+    @Published var keyCorner: LegendCorner = .topLeft
+
+    // The user's own recording instead of the synthesised instruments
+    @Published var customAudio: CustomAudio?
 
     // Export
     @Published var resolution: Resolution = .p1080
@@ -110,12 +116,33 @@ final class AppModel: ObservableObject {
         s.hidden = Set(parts.indices.filter { parts[$0].look == .hidden })
         s.faint = Set(parts.indices.filter { parts[$0].look == .faint })
         s.faintOpacity = CGFloat(faintOpacity)
+        s.legendCorner = keyCorner
+        if showKey { s.legend = legendEntries() }
         return s
+    }
+
+    /// What a part is called: the title the user typed, otherwise the instrument's name.
+    func displayName(_ i: Int) -> String {
+        guard parts.indices.contains(i), let song, song.parts.indices.contains(i) else { return "" }
+        let typed = parts[i].title.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !typed.isEmpty { return typed }
+        return song.parts[i].isDrums ? "Drums" : GM.names[min(max(parts[i].program, 0), 127)]
+    }
+
+    /// One line per visible instrument; instruments with the same title and colour share a line.
+    private func legendEntries() -> [LegendEntry] {
+        var entries: [LegendEntry] = []
+        for i in parts.indices where parts[i].look != .hidden {
+            let color = NSColor(parts[i].color).usingColorSpace(.sRGB)?.cgColor ?? Palette.defaults[0]
+            let entry = LegendEntry(title: displayName(i), color: color, faint: parts[i].look == .faint)
+            if !entries.contains(entry) { entries.append(entry) }
+        }
+        return entries
     }
 
     var audioSettings: AudioSettings {
         AudioSettings(soundFont: soundFont, programs: parts.map(\.program), audible: parts.map(\.audible),
-                      volumes: parts.map { Float($0.volume) })
+                      volumes: parts.map { Float($0.volume) }, custom: customAudio)
     }
 
     var total: Double { song?.totalDuration ?? 0 }
@@ -145,6 +172,7 @@ final class AppModel: ObservableObject {
                           audible: true,
                           color: Color(cgColor: Palette.defaults[i % Palette.defaults.count]))
             }
+            customAudio = nil   // a recording belongs to one song
             let settings = AudioSettings(soundFont: soundFont, programs: newParts.map(\.program),
                                          audible: newParts.map(\.audible))
             let p: AudioPlayer
@@ -196,6 +224,37 @@ final class AppModel: ObservableObject {
             parts[i].program = old
             errorMessage = "That instrument isn't available in the current soundfont."
         }
+    }
+
+    func setTitle(_ i: Int, _ title: String) {
+        guard parts.indices.contains(i) else { return }
+        parts[i].title = title
+    }
+
+    // MARK: Your own audio
+
+    func chooseAudio() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.audio]
+        panel.allowsMultipleSelection = false
+        panel.message = "Choose a recording of this song (for example exported from MuseScore)"
+        if panel.runModal() == .OK, let url = panel.url { setCustomAudio(CustomAudio(url: url, offset: customAudio?.offset ?? 0)) }
+    }
+
+    func setCustomAudio(_ audio: CustomAudio?) {
+        do {
+            try player?.setCustomAudio(audio)
+            customAudio = audio
+        } catch {
+            errorMessage = "Couldn't open that audio file: \(error.localizedDescription)"
+        }
+    }
+
+    func setAudioOffset(_ seconds: Double) {
+        guard var c = customAudio else { return }
+        c.offset = max(-10, min(10, seconds))
+        customAudio = c
+        player?.setCustomOffset(c.offset)
     }
 
     func resetInstruments() {

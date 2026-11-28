@@ -222,6 +222,27 @@ if let i = args.firstIndex(of: "--export"), args.count > i + 2 {
             if let s = args.firstIndex(of: "--soundfont"), args.count > s + 1 {
                 audio.soundFont = URL(fileURLWithPath: args[s + 1])
             }
+            // --key [--key-right] [--title 0=Violin I,1=Cello]: a key listing each visible instrument
+            if args.contains("--key") {
+                var titles: [Int: String] = [:]
+                if let t = args.firstIndex(of: "--title"), args.count > t + 1 {
+                    for pair in args[t + 1].split(separator: ",") {
+                        let kv = pair.split(separator: "=", maxSplits: 1)
+                        if kv.count == 2, let i = Int(kv[0]) { titles[i] = String(kv[1]) }
+                    }
+                }
+                for i in song.parts.indices where !style.hidden.contains(i) {
+                    style.legend.append(LegendEntry(title: titles[i] ?? song.parts[i].name, color: style.color(i),
+                                                    faint: style.faint.contains(i)))
+                }
+                if args.contains("--key-right") { style.legendCorner = .topRight }
+            }
+            // --audio file.wav [--audio-offset 0.1]: use a recording instead of the synthesised instruments
+            if let a = args.firstIndex(of: "--audio"), args.count > a + 1 {
+                var custom = CustomAudio(url: URL(fileURLWithPath: args[a + 1]))
+                if let o = args.firstIndex(of: "--audio-offset"), args.count > o + 1, let v = Double(args[o + 1]) { custom.offset = v }
+                audio.custom = custom
+            }
             let tick: @Sendable (Double) -> Void = { p in
                 print(String(format: "\rprogress %.0f%%", p * 100), terminator: "")
                 fflush(stdout)

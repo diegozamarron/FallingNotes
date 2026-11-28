@@ -84,7 +84,7 @@ enum Exporter {
             .appendingPathComponent("fallingnotes-\(UUID().uuidString).caf")
         defer { try? FileManager.default.removeItem(at: audioURL) }
         if options.includeAudio {
-            try AudioPlayer(song: song, settings: audio).renderOffline(to: audioURL, duration: total)
+            try AudioPlayer.renderAudio(song: song, settings: audio, to: audioURL, duration: total)
         }
 
         // 2. Set up the writer.

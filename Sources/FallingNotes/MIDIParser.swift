@@ -169,7 +169,8 @@ enum MIDIParser {
             // The track's name can say more than a vague or missing program ("Violas (section)" + String Ensemble).
             let prog = isDrums ? 0 : InstrumentRules.program(forTrackName: trackNames[r.track],
                                                              fileProgram: fileProgram,
-                                                             explicit: programChanges[r.channel] != nil)
+                                                             explicit: programChanges[r.channel] != nil,
+                                                             switchesProgram: Set(programChanges[r.channel]?.map(\.program) ?? []).count > 1)
             return Key(track: r.track, channel: r.channel, program: prog)
         }
         let orderedKeys = Array(Set(keys)).sorted()

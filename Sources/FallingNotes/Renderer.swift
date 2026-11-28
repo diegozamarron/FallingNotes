@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Diego Zamarron
+import CoreText
 import CoreGraphics
 import Foundation
 
@@ -12,10 +13,25 @@ struct Style {
     var hidden: Set<Int> = []          // part indices that are not drawn
     var faint: Set<Int> = []           // part indices drawn translucent behind the others
     var faintOpacity: CGFloat = 0.3
+    /// The key: one line per instrument (colour + title). Empty = no key.
+    var legend: [LegendEntry] = []
+    var legendCorner: LegendCorner = .topLeft
 
     func color(_ index: Int) -> CGColor {
         trackColors.isEmpty ? Palette.defaults[0] : trackColors[index % trackColors.count]
     }
+}
+
+struct LegendEntry: Equatable {
+    var title: String
+    var color: CGColor
+    var faint: Bool
+}
+
+enum LegendCorner: String, CaseIterable, Identifiable {
+    case topLeft, topRight
+    var id: String { rawValue }
+    var label: String { self == .topLeft ? "Top left" : "Top right" }
 }
 
 enum Palette {
@@ -253,5 +269,62 @@ func drawFrame(_ ctx: CGContext, size: CGSize, videoTime: Double, song: Song, st
     // Red felt strip along the top of the keys.
     ctx.setFillColor(CGColor(srgbRed: 0.72, green: 0.1, blue: 0.14, alpha: 1))
     ctx.fill(CGRect(x: 0, y: whiteTop - 3 * scale, width: W, height: 3 * scale))
+    if !style.legend.isEmpty { drawLegend(ctx, size: size, scale: scale, style: style) }
+    ctx.restoreGState()
+}
+
+/// The key: a rounded panel with a colour swatch and a title for each instrument. `ctx` has a top-left origin.
+private func drawLegend(_ ctx: CGContext, size: CGSize, scale: CGFloat, style: Style) {
+    let fontSize = 22 * scale
+    let font = CTFontCreateWithName("Helvetica Neue Medium" as CFString, fontSize, nil)
+    let rowH = fontSize * 1.55
+    let pad = 14 * scale
+    let swatch = fontSize * 0.8
+    let gapX = 10 * scale
+
+    var lines: [(CTLine, CGFloat)] = []
+    var textW: CGFloat = 0
+    for e in style.legend {
+        let attrs: [NSAttributedString.Key: Any] = [
+            NSAttributedString.Key(kCTFontAttributeName as String): font,
+            NSAttributedString.Key(kCTForegroundColorAttributeName as String): CGColor(gray: 1, alpha: e.faint ? 0.6 : 0.95),
+        ]
+        let line = CTLineCreateWithAttributedString(NSAttributedString(string: e.title, attributes: attrs))
+        var ascent: CGFloat = 0, descent: CGFloat = 0, leading: CGFloat = 0
+        let w = CGFloat(CTLineGetTypographicBounds(line, &ascent, &descent, &leading))
+        lines.append((line, ascent))
+        textW = max(textW, w)
+    }
+    let panelW = min(pad * 2 + swatch + gapX + textW, size.width * 0.5)
+    let panelH = pad * 2 + rowH * CGFloat(lines.count) - (rowH - swatch)
+    let margin = 20 * scale
+    let x0 = style.legendCorner == .topLeft ? margin : size.width - margin - panelW
+    let y0 = margin
+
+    let panel = CGPath(roundedRect: CGRect(x: x0, y: y0, width: panelW, height: panelH),
+                       cornerWidth: 12 * scale, cornerHeight: 12 * scale, transform: nil)
+    ctx.addPath(panel)
+    ctx.setFillColor(CGColor(gray: 0, alpha: 0.55))
+    ctx.fillPath()
+    ctx.addPath(panel)
+    ctx.setStrokeColor(CGColor(gray: 1, alpha: 0.12))
+    ctx.setLineWidth(max(1, scale))
+    ctx.strokePath()
+
+    ctx.saveGState()
+    ctx.clip(to: CGRect(x: x0, y: y0, width: panelW, height: panelH))
+    for (i, e) in style.legend.enumerated() {
+        let rowTop = y0 + pad + rowH * CGFloat(i)
+        let r = CGRect(x: x0 + pad, y: rowTop, width: swatch, height: swatch)
+        ctx.setFillColor(e.faint ? (e.color.copy(alpha: max(0.3, style.faintOpacity + 0.2)) ?? e.color) : e.color)
+        ctx.addPath(CGPath(roundedRect: r, cornerWidth: swatch * 0.28, cornerHeight: swatch * 0.28, transform: nil))
+        ctx.fillPath()
+
+        // Text in a flipped coordinate system (the context's origin is the top left).
+        let (line, ascent) = lines[i]
+        ctx.textMatrix = CGAffineTransform(scaleX: 1, y: -1)
+        ctx.textPosition = CGPoint(x: x0 + pad + swatch + gapX, y: rowTop + swatch / 2 + ascent * 0.36)
+        CTLineDraw(line, ctx)
+    }
     ctx.restoreGState()
 }

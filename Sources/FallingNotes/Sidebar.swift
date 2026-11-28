@@ -421,7 +421,7 @@ struct PartRow: View {
                     Button { withAnimation(.easeInOut(duration: 0.15)) { expanded.toggle() } } label: {
                         HStack(spacing: 4) {
                             VStack(alignment: .leading, spacing: 1) {
-                                Text(part.isDrums ? "Drums" : GM.names[state.program])
+                                Text(model.displayName(index))
                                     .font(.system(size: 13, weight: .semibold)).lineLimit(1)
                                     .minimumScaleFactor(0.85)
                                 Text(subtitle(part))
@@ -442,6 +442,11 @@ struct PartRow: View {
                 }
 
                 if expanded {
+                    TextField("Title in the key", text: Binding(get: { model.parts[index].title },
+                                                                set: { model.setTitle(index, $0) }),
+                              prompt: Text(part.isDrums ? "Drums" : GM.names[state.program]))
+                        .textFieldStyle(.roundedBorder)
+                        .controlSize(.small)
                     if !part.isDrums {
                         InstrumentButton(program: state.program) { model.setProgram(index, $0) }
                     }
@@ -480,12 +485,51 @@ struct SoundCard: View {
                     if model.soundFont != nil { Button("Reset") { model.setSoundFont(nil) } }
                 }
                 .controlSize(.small)
-                if model.song != nil {
+                if model.song != nil { OwnAudioSection() }
+                if model.song != nil && model.customAudio == nil {
                     Button { model.resetInstruments() } label: {
                         Label("Reset instruments to the MIDI file's", systemImage: "arrow.counterclockwise")
                     }
                     .controlSize(.small)
                 }
+            }
+        }
+    }
+}
+
+/// Use a recording (say, exported from MuseScore from the same MIDI file) instead of the built-in sounds.
+struct OwnAudioSection: View {
+    @EnvironmentObject var model: AppModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Divider()
+            HStack(spacing: 8) {
+                Image(systemName: "waveform.badge.plus").foregroundStyle(.secondary)
+                Text(model.customAudio?.url.lastPathComponent ?? "Your own audio")
+                    .font(.system(size: 12.5)).lineLimit(1).truncationMode(.middle)
+                Spacer(minLength: 4)
+                Button(model.customAudio == nil ? "Choose…" : "Change…") { model.chooseAudio() }
+                if model.customAudio != nil { Button("Remove") { model.setCustomAudio(nil) } }
+            }
+            .controlSize(.small)
+            if let custom = model.customAudio {
+                SettingRow("Nudge") {
+                    TextField("", value: Binding(get: { custom.offset }, set: { model.setAudioOffset($0) }),
+                              format: .number.precision(.fractionLength(0...2)))
+                        .textFieldStyle(.roundedBorder).multilineTextAlignment(.trailing)
+                        .frame(width: 60).controlSize(.small)
+                    Text("seconds").font(.system(size: 11)).foregroundStyle(.secondary)
+                    Stepper("", value: Binding(get: { custom.offset }, set: { model.setAudioOffset($0) }), in: -10...10, step: 0.05)
+                        .labelsHidden().controlSize(.small)
+                }
+                Text("Plays instead of the instrument sounds, starting with the first beat of the MIDI file, so audio exported from the same score lines up. Use Nudge if it's slightly early or late. Instrument sound settings are off while this is used.")
+                    .font(.system(size: 10.5)).foregroundStyle(.tertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                Text("Optional: use a recording of this song, such as audio exported from MuseScore from the same MIDI file.")
+                    .font(.system(size: 10.5)).foregroundStyle(.tertiary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
@@ -512,6 +556,20 @@ struct LookCard: View {
                 }
                 SettingRow("Glow on active notes") {
                     Toggle("", isOn: $model.glow).labelsHidden().toggleStyle(.switch).controlSize(.small)
+                }
+                SettingRow("Show a key") {
+                    Toggle("", isOn: $model.showKey).labelsHidden().toggleStyle(.switch).controlSize(.small)
+                }
+                if model.showKey {
+                    SettingRow("Key position") {
+                        Picker("", selection: $model.keyCorner) {
+                            ForEach(LegendCorner.allCases) { Text($0.label).tag($0) }
+                        }
+                        .labelsHidden().pickerStyle(.segmented).frame(width: 140).controlSize(.small)
+                    }
+                    Text("Lists each visible instrument with its colour. Rename instruments by opening them in the list.")
+                        .font(.system(size: 10.5)).foregroundStyle(.tertiary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 SettingRow("Background") {
                     ColorChoiceButton(selection: $model.background, presets: Palette.backgrounds, diameter: 22)

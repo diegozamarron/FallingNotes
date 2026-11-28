@@ -194,7 +194,7 @@ enum SegmentedExporter {
         var audioURL: URL?
         if options.includeAudio {
             let caf = work.appendingPathComponent("audio.caf")
-            try AudioPlayer(song: song, settings: audio).renderOffline(to: caf, duration: total)
+            try AudioPlayer.renderAudio(song: song, settings: audio, to: caf, duration: total)
             audioURL = try await encodeAudio(caf, to: work.appendingPathComponent("audio.m4a"))
             try? FileManager.default.removeItem(at: caf)
         }
@@ -614,6 +614,8 @@ enum SegmentCache {
         put(start); put(count)
         put(style.fallSeconds); put(style.background); put(style.fullKeyboard ? 1 : 0); put(style.glow ? 1 : 0)
         put(Double(style.faintOpacity))
+        put(style.legendCorner.rawValue)
+        for e in style.legend { put(e.title); put(e.color); put(e.faint ? 1 : 0) }
         let layout = KeyLayout(song: song, fullKeyboard: style.fullKeyboard, width: CGFloat(w))
         put(layout.lo); put(layout.hi)
 

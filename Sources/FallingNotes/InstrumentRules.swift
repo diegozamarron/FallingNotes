@@ -11,14 +11,15 @@ enum InstrumentRules {
     /// The first matching rule wins, so more specific names come before general ones
     /// ("electric piano" before "piano", "english horn" before "horn", "contrabass" before "bass").
     static let rules: [(keywords: [String], program: Int)] = [
+        // Playing techniques come first: "Violins pizzicato" is pizzicato strings, not a plain violin.
+        (["pizzicato", "pizz.", "pizz", "pizzi"], 45),
+        (["tremolo", "trem."], 44),
         // Strings
         (["contrabass", "double bass", "doublebass", "string bass", "basses (section)"], 43),
         (["violoncello", "cello"], 42),
         (["viola"], 41),
         (["violin"], 40),
         (["fiddle"], 110),
-        (["pizzicato", "pizz"], 45),
-        (["tremolo"], 44),
         (["harp"], 46),
         (["timpani"], 47),
         // Keys
@@ -91,9 +92,14 @@ enum InstrumentRules {
 
     /// The instrument for a track.
     /// - `fileProgram`: the program number the file itself assigns.
+    /// - `switchesProgram`: the file changes the program on this channel (e.g. arco ↔ pizzicato); then the file is trusted, not the name.
     /// - `explicit`: whether the file sets a program at all for that channel (otherwise it's just the default piano).
     /// The name wins when the file gave no program or only a vague one; a specific program in the file is kept.
-    static func program(forTrackName name: String?, fileProgram: Int, explicit: Bool) -> Int {
+    static func program(forTrackName name: String?, fileProgram: Int, explicit: Bool, switchesProgram: Bool = false) -> Int {
+        // A technique in the name (pizzicato, tremolo) beats a plain bowed-string program in the file.
+        if !switchesProgram, let technique = match(name), technique == 45 || technique == 44, !explicit || (40...51).contains(fileProgram) {
+            return technique
+        }
         guard !explicit || vaguePrograms.contains(fileProgram) else { return fileProgram }
         guard let match = match(name) else { return fileProgram }
         return match
