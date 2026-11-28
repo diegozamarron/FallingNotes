@@ -535,21 +535,52 @@ struct OwnAudioSection: View {
     }
 }
 
+/// One of the three video styles, as a tile with an icon.
+struct VisualModeButton: View {
+    let mode: VisualMode
+    @Binding var selection: VisualMode
+
+    private var icon: String {
+        switch mode {
+        case .simple: return "square.grid.2x2"
+        case .polished: return "sparkle"
+        case .cinematic: return "wand.and.stars"
+        }
+    }
+
+    var body: some View {
+        let selected = selection == mode
+        Button { selection = mode } label: {
+            VStack(spacing: 4) {
+                Image(systemName: icon).font(.system(size: 15, weight: .medium))
+                Text(mode.label).font(.system(size: 11, weight: .medium)).lineLimit(1).minimumScaleFactor(0.8)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 8)
+            .foregroundStyle(selected ? Color.white : Color.primary.opacity(0.75))
+            .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(selected ? Color.accentColor : Color.primary.opacity(0.07)))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+}
+
 struct LookCard: View {
     @EnvironmentObject var model: AppModel
 
     var body: some View {
         Card("Look", icon: "paintbrush") {
             VStack(spacing: 10) {
-                SettingRow("Video style") {
-                    Picker("", selection: $model.visualMode) {
-                        ForEach(VisualMode.allCases) { Text($0.label).tag($0) }
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Video style").font(.system(size: 12.5))
+                    HStack(spacing: 6) {
+                        ForEach(VisualMode.allCases) { VisualModeButton(mode: $0, selection: $model.visualMode) }
                     }
-                    .labelsHidden().pickerStyle(.segmented).frame(width: 190).controlSize(.small)
+                    Text(model.visualMode.detail)
+                        .font(.system(size: 10.5)).foregroundStyle(.tertiary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                Text(model.visualMode.detail)
-                    .font(.system(size: 10.5)).foregroundStyle(.tertiary)
-                    .fixedSize(horizontal: false, vertical: true)
                 SettingRow("Fall time") {
                     Slider(value: $model.fallSeconds, in: 1...3).frame(width: 130).controlSize(.small)
                     Text(String(format: "%.1fs", model.fallSeconds))

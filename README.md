@@ -11,7 +11,7 @@ adjust how each instrument looks and sounds, and export an `.mp4` or `.mov`.
 - **Per-instrument control** — colour, volume (0–150%, type an exact value), mute the sound, and show / fade into the background / hide the notes. These are independent, so you can hear an instrument without seeing it, or the other way round.
 - **Select and group** — tick several instruments to change them together, or group them (by hand or **Auto-group** by family). A group's volume keeps the balance between its members.
 - **Your own audio, a key and titles** — use a recording of the song (for example exported from MuseScore from the same MIDI) instead of the built-in sounds, show a key listing each instrument's colour, and give each instrument a title.
-- **Video styles** — **Simple** (flat and very readable), **Polished** (shaded notes, glossy keys, gradient background, fade at the top) and **Cinematic** (adds neon-style notes, light pools and sparks at the keys, floating dust, a slowly shifting background and a vignette, for presentations and videos). Applies to the preview and the export.
+- **Video styles** — **Simple** (flat and very readable), **Polished** (shaded notes, glossy keys, gradient background, fade at the top) and **Cinematic** (treats the keyboard as the light source: notes emerge from the dark, sounding keys glow and fade out on release, with sparks on calm passages and a soft vignette, for presentations and videos). Applies to the preview and the export.
 - **Colour palette** — Synthesia-style green and blue, with a coral orange as the third colour.
 
 ## Install
